@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { extractOrderFromERP } from "@/lib/claude";
+import { extractOrderFromERP } from "@/lib/openai";
 
 export async function POST(req: NextRequest) {
   try {
@@ -15,7 +15,6 @@ export async function POST(req: NextRequest) {
     const mediaType = file.type || "image/jpeg";
 
     const orderInfo = await extractOrderFromERP(base64, mediaType);
-
     return NextResponse.json({ success: true, data: orderInfo });
   } catch (err) {
     console.error("ERP OCR error:", err);

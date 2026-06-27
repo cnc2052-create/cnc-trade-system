@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { extractShipmentFromFactory } from "@/lib/claude";
+import { extractShipmentFromFactory } from "@/lib/openai";
 
 export async function POST(req: NextRequest) {
   try {
@@ -15,7 +15,6 @@ export async function POST(req: NextRequest) {
     const mediaType = file.type || "image/jpeg";
 
     const shipmentInfo = await extractShipmentFromFactory(base64, mediaType);
-
     return NextResponse.json({ success: true, data: shipmentInfo });
   } catch (err) {
     console.error("Factory OCR error:", err);

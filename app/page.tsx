@@ -1,62 +1,259 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useCallback } from "react";
 import { OrderInfo, FactoryShipmentInfo } from "@/types";
 
-type Step = "idle" | "erp-uploading" | "factory-uploading" | "ready" | "generating";
+/* ─────────────────────────── types ─────────────────────────── */
+type UploadState = "idle" | "uploading" | "done" | "error";
 
-export default function Home() {
-  const [step, setStep] = useState<Step>("idle");
+interface UploadZoneState {
+  status: UploadState;
+  preview: string | null;
+  error: string | null;
+}
+
+/* ─────────────────────────── icons ─────────────────────────── */
+function IconUpload() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+      <path d="M10 13V4M10 4L7 7M10 4L13 7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+      <path d="M3 14v2a1 1 0 001 1h12a1 1 0 001-1v-2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+    </svg>
+  );
+}
+
+function IconCheck() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+      <path d="M2.5 7L5.5 10L11.5 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  );
+}
+
+function IconSpinner({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" className="animate-spin">
+      <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.5" strokeOpacity="0.2"/>
+      <path d="M8 2a6 6 0 016 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+    </svg>
+  );
+}
+
+function IconFile() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <path d="M9 1H4a1 1 0 00-1 1v12a1 1 0 001 1h8a1 1 0 001-1V6L9 1z" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+      <path d="M9 1v5h5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  );
+}
+
+function IconDownload() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+      <path d="M7 1v8M7 9L4.5 6.5M7 9L9.5 6.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+      <path d="M1.5 11.5h11" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+    </svg>
+  );
+}
+
+function IconRefresh() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+      <path d="M11 6.5A4.5 4.5 0 112.5 3.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+      <path d="M2.5 1v2.5H5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  );
+}
+
+/* ─────────────────────────── doc configs ─────────────────────────── */
+const DOCS = [
+  {
+    id: "marking",
+    label: "중국발주서 마킹",
+    sublabel: "공장 전송용",
+    ext: "PDF",
+    color: "bg-zinc-900 hover:bg-zinc-800",
+  },
+  {
+    id: "packing-pdf",
+    label: "패킹리스트",
+    sublabel: "포워딩용",
+    ext: "PDF",
+    color: "bg-zinc-900 hover:bg-zinc-800",
+  },
+  {
+    id: "packing-excel",
+    label: "패킹리스트",
+    sublabel: "포워딩용",
+    ext: "Excel",
+    color: "bg-zinc-900 hover:bg-zinc-800",
+  },
+  {
+    id: "receipt",
+    label: "입고명세서",
+    sublabel: "국내 고객사용",
+    ext: "PDF",
+    color: "bg-zinc-900 hover:bg-zinc-800",
+  },
+] as const;
+
+/* ─────────────────────────── upload zone ─────────────────────────── */
+function UploadZone({
+  title,
+  hint,
+  state,
+  summary,
+  onFile,
+  onReset,
+}: {
+  title: string;
+  hint: string;
+  state: UploadZoneState;
+  summary?: React.ReactNode;
+  onFile: (f: File) => void;
+  onReset: () => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [dragging, setDragging] = useState(false);
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      setDragging(false);
+      const file = e.dataTransfer.files[0];
+      if (file && file.type.startsWith("image/")) onFile(file);
+    },
+    [onFile]
+  );
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center justify-between">
+        <span className="text-[13px] font-semibold text-gray-900 tracking-tight">{title}</span>
+        {state.status === "done" && (
+          <button
+            onClick={onReset}
+            className="flex items-center gap-1 text-[11px] text-gray-400 hover:text-gray-600 transition-colors"
+          >
+            <IconRefresh />
+            재업로드
+          </button>
+        )}
+      </div>
+
+      {state.status === "idle" || state.status === "error" ? (
+        <label
+          onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={handleDrop}
+          className={`
+            relative flex flex-col items-center justify-center gap-3 h-40 rounded-xl border-[1.5px] border-dashed cursor-pointer
+            transition-all duration-200 select-none
+            ${dragging
+              ? "border-gray-400 bg-gray-50 scale-[1.01]"
+              : "border-gray-200 bg-gray-50/50 hover:border-gray-300 hover:bg-gray-50"
+            }
+          `}
+        >
+          <input
+            ref={inputRef}
+            type="file"
+            accept="image/*"
+            className="sr-only"
+            onChange={(e) => { if (e.target.files?.[0]) onFile(e.target.files[0]); }}
+          />
+          <div className="w-8 h-8 rounded-lg bg-white border border-gray-200 shadow-sm flex items-center justify-center text-gray-500">
+            <IconUpload />
+          </div>
+          <div className="text-center">
+            <p className="text-[13px] font-medium text-gray-700">클릭하거나 드래그하여 업로드</p>
+            <p className="text-[11px] text-gray-400 mt-0.5">{hint}</p>
+          </div>
+          {state.status === "error" && state.error && (
+            <p className="absolute bottom-3 text-[11px] text-red-500">{state.error}</p>
+          )}
+        </label>
+      ) : state.status === "uploading" ? (
+        <div className="flex flex-col items-center justify-center gap-3 h-40 rounded-xl border border-gray-100 bg-gray-50">
+          {state.preview && (
+            <div className="absolute inset-0 rounded-xl overflow-hidden opacity-10">
+              <img src={state.preview} alt="" className="w-full h-full object-cover" />
+            </div>
+          )}
+          <IconSpinner size={20} />
+          <p className="text-[12px] text-gray-500">AI가 정보를 추출하는 중...</p>
+        </div>
+      ) : (
+        /* done */
+        <div className="rounded-xl border border-gray-100 overflow-hidden animate-fadeUp">
+          {state.preview && (
+            <div className="h-28 bg-gray-50 overflow-hidden">
+              <img src={state.preview} alt="업로드된 이미지" className="w-full h-full object-contain" />
+            </div>
+          )}
+          <div className="p-3 bg-white">
+            <div className="flex items-center gap-1.5 mb-2">
+              <span className="w-4 h-4 rounded-full bg-green-100 text-green-600 flex items-center justify-center flex-shrink-0">
+                <IconCheck />
+              </span>
+              <span className="text-[11px] font-medium text-green-700">추출 완료</span>
+            </div>
+            {summary}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─────────────────────────── summary rows ─────────────────────────── */
+function SummaryRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-baseline justify-between gap-2">
+      <span className="text-[11px] text-gray-400 whitespace-nowrap">{label}</span>
+      <span className="text-[11px] font-medium text-gray-800 text-right truncate">{value}</span>
+    </div>
+  );
+}
+
+/* ─────────────────────────── main page ─────────────────────────── */
+export default function Page() {
+  const [erpState, setErpState] = useState<UploadZoneState>({ status: "idle", preview: null, error: null });
+  const [factoryState, setFactoryState] = useState<UploadZoneState>({ status: "idle", preview: null, error: null });
   const [order, setOrder] = useState<OrderInfo | null>(null);
   const [shipment, setShipment] = useState<FactoryShipmentInfo | null>(null);
-  const [erpPreview, setErpPreview] = useState<string | null>(null);
-  const [factoryPreview, setFactoryPreview] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [generatingDoc, setGeneratingDoc] = useState<string | null>(null);
+  const [downloading, setDownloading] = useState<string | null>(null);
+  const [globalError, setGlobalError] = useState<string | null>(null);
 
-  const erpInputRef = useRef<HTMLInputElement>(null);
-  const factoryInputRef = useRef<HTMLInputElement>(null);
+  const isReady = order !== null && shipment !== null;
 
-  async function handleErpUpload(file: File) {
-    setError(null);
-    setStep("erp-uploading");
-    setErpPreview(URL.createObjectURL(file));
+  async function uploadImage(
+    file: File,
+    endpoint: string,
+    setState: React.Dispatch<React.SetStateAction<UploadZoneState>>,
+    onSuccess: (data: unknown) => void
+  ) {
+    const preview = URL.createObjectURL(file);
+    setState({ status: "uploading", preview, error: null });
     try {
       const fd = new FormData();
       fd.append("image", file);
-      const res = await fetch("/api/ocr-erp", { method: "POST", body: fd });
+      const res = await fetch(endpoint, { method: "POST", body: fd });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error);
-      setOrder(json.data);
-      setStep("idle");
+      setState({ status: "done", preview, error: null });
+      onSuccess(json.data);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "오류가 발생했습니다.");
-      setStep("idle");
+      const msg = e instanceof Error ? e.message : "오류가 발생했습니다.";
+      setState({ status: "error", preview: null, error: msg });
     }
   }
 
-  async function handleFactoryUpload(file: File) {
-    setError(null);
-    setStep("factory-uploading");
-    setFactoryPreview(URL.createObjectURL(file));
-    try {
-      const fd = new FormData();
-      fd.append("image", file);
-      const res = await fetch("/api/ocr-factory", { method: "POST", body: fd });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error);
-      setShipment(json.data);
-      setStep("idle");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "오류가 발생했습니다.");
-      setStep("idle");
-    }
-  }
-
-  async function generateDoc(docType: string, label: string) {
+  async function downloadDoc(docType: string) {
     if (!order || !shipment) return;
-    setGeneratingDoc(label);
-    setError(null);
+    setDownloading(docType);
+    setGlobalError(null);
     try {
       const res = await fetch("/api/generate-docs", {
         method: "POST",
@@ -73,222 +270,240 @@ export default function Home() {
       const filename = match ? decodeURIComponent(match[1]) : `${docType}.pdf`;
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
-      a.href = url;
-      a.download = filename;
-      a.click();
+      a.href = url; a.download = filename; a.click();
       URL.revokeObjectURL(url);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "문서 생성 오류");
+      setGlobalError(e instanceof Error ? e.message : "다운로드 오류");
     } finally {
-      setGeneratingDoc(null);
+      setDownloading(null);
     }
   }
 
-  const isReady = order !== null && shipment !== null;
+  async function downloadAll() {
+    for (const doc of DOCS) {
+      await downloadDoc(doc.id);
+    }
+  }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-blue-800 text-white px-6 py-4 shadow">
-        <div className="max-w-6xl mx-auto flex items-center gap-3">
-          <span className="text-2xl">🏭</span>
-          <div>
-            <h1 className="text-xl font-bold">씨앤씨무역 물류 자동화 시스템</h1>
-            <p className="text-blue-200 text-sm">CNC Trading - Document Auto Generation</p>
+    <div className="min-h-screen bg-white">
+      {/* ── Navbar ── */}
+      <nav className="sticky top-0 z-50 border-b border-gray-100 bg-white/80 backdrop-blur-xl">
+        <div className="max-w-5xl mx-auto px-6 h-14 flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="w-6 h-6 rounded-md bg-zinc-900 flex items-center justify-center">
+              <span className="text-white text-[10px] font-bold tracking-tight">C&C</span>
+            </div>
+            <span className="text-[14px] font-semibold text-gray-900 tracking-tight">씨앤씨무역</span>
+            <span className="hidden sm:block text-[12px] text-gray-400 font-normal">물류 자동화</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="hidden sm:flex items-center gap-1.5 text-[11px] text-gray-500 bg-gray-50 border border-gray-200 rounded-full px-3 py-1">
+              <span className={`w-1.5 h-1.5 rounded-full ${isReady ? "bg-green-500" : "bg-gray-300"}`} />
+              {isReady ? "문서 생성 가능" : "이미지 업로드 필요"}
+            </span>
           </div>
         </div>
-      </header>
+      </nav>
 
-      <main className="max-w-6xl mx-auto px-4 py-8 space-y-8">
-        {/* Error */}
-        {error && (
-          <div className="bg-red-50 border border-red-300 text-red-700 px-4 py-3 rounded-lg flex items-start gap-2">
-            <span>⚠️</span>
-            <div>
-              <strong>오류:</strong> {error}
-              <button className="ml-3 text-sm underline" onClick={() => setError(null)}>닫기</button>
+      <main className="max-w-5xl mx-auto px-6 py-12">
+        {/* ── Hero ── */}
+        <div className="mb-12">
+          <p className="text-[11px] font-medium text-gray-400 uppercase tracking-widest mb-3">Logistics Automation</p>
+          <h1 className="text-[32px] font-bold text-gray-900 tracking-tight leading-tight mb-3">
+            이미지 하나로<br className="sm:hidden" /> 모든 문서를 자동으로
+          </h1>
+          <p className="text-[15px] text-gray-500 leading-relaxed max-w-lg">
+            ERP 수주 화면과 공장 출고 이미지를 업로드하면
+            중국발주서 마킹 · 패킹리스트 · 입고명세서를 즉시 생성합니다.
+          </p>
+        </div>
+
+        {/* ── Global error ── */}
+        {globalError && (
+          <div className="mb-6 flex items-start gap-3 px-4 py-3 bg-red-50 border border-red-100 rounded-xl animate-fadeUp">
+            <span className="text-red-400 mt-0.5 flex-shrink-0 text-sm">⚠</span>
+            <div className="flex-1 min-w-0">
+              <p className="text-[13px] text-red-700">{globalError}</p>
             </div>
+            <button onClick={() => setGlobalError(null)} className="text-red-300 hover:text-red-500 text-lg leading-none flex-shrink-0">×</button>
           </div>
         )}
 
-        {/* Upload section */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* ERP Upload */}
-          <div className="bg-white rounded-xl border-2 border-dashed border-blue-200 p-6 hover:border-blue-400 transition-colors">
-            <div className="text-center mb-4">
-              <div className="text-3xl mb-2">📋</div>
-              <h2 className="text-lg font-bold text-gray-800">STEP 1. ERP 수주 화면</h2>
-              <p className="text-sm text-gray-500 mt-1">ERP에서 수주 화면 캡쳐 업로드</p>
+        {/* ── Upload + Preview grid ── */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-10">
+          {/* Card 1 — ERP */}
+          <div className="rounded-2xl border border-gray-100 bg-white shadow-[0_1px_4px_rgba(0,0,0,0.06)] p-5">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="w-5 h-5 rounded-md bg-blue-50 text-blue-600 flex items-center justify-center text-[10px] font-bold">1</span>
+              <span className="text-[12px] font-medium text-gray-500 uppercase tracking-wider">ERP 수주 화면</span>
             </div>
-
-            {erpPreview ? (
-              <div className="space-y-3">
-                <img src={erpPreview} alt="ERP 캡쳐" className="w-full rounded-lg border object-contain max-h-48" />
-                {step === "erp-uploading" && (
-                  <div className="flex items-center gap-2 text-blue-600 text-sm">
-                    <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                    </svg>
-                    AI가 수주 정보 추출 중...
+            <p className="text-[12px] text-gray-400 mb-4 ml-7">수주번호 · 고객사 · 품목 · 금액을 자동 추출</p>
+            <UploadZone
+              title="수주 화면 캡쳐"
+              hint="PNG · JPG · 화면 캡쳐 모두 가능"
+              state={erpState}
+              onFile={(f) =>
+                uploadImage(f, "/api/ocr-erp", setErpState, (data) =>
+                  setOrder(data as OrderInfo)
+                )
+              }
+              onReset={() => { setErpState({ status: "idle", preview: null, error: null }); setOrder(null); }}
+              summary={
+                order && (
+                  <div className="space-y-1.5">
+                    <SummaryRow label="수주번호" value={order.orderNo || "—"} />
+                    <SummaryRow label="고객사" value={order.customer || "—"} />
+                    <SummaryRow label="품목" value={`${order.items?.length || 0}개 품목`} />
+                    <SummaryRow
+                      label="합계"
+                      value={`${order.currency || "KRW"} ${order.totalAmount?.toLocaleString() || "0"}`}
+                    />
+                    {order.deliveryDate && (
+                      <SummaryRow label="납기일" value={order.deliveryDate} />
+                    )}
                   </div>
-                )}
-                {order && (
-                  <div className="bg-blue-50 rounded-lg p-3 text-sm space-y-1">
-                    <p className="font-bold text-blue-800">✅ 수주 정보 추출 완료</p>
-                    <p>수주번호: <strong>{order.orderNo}</strong></p>
-                    <p>고객사: <strong>{order.customer}</strong></p>
-                    <p>품목 수: <strong>{order.items?.length || 0}개</strong></p>
-                    <p>합계: <strong>{order.currency} {order.totalAmount?.toLocaleString()}</strong></p>
-                  </div>
-                )}
-                <button
-                  className="w-full text-sm text-gray-400 hover:text-gray-600 underline"
-                  onClick={() => { setOrder(null); setErpPreview(null); if (erpInputRef.current) erpInputRef.current.value = ""; }}
-                >
-                  다시 업로드
-                </button>
-              </div>
-            ) : (
-              <label className="block cursor-pointer">
-                <input
-                  ref={erpInputRef}
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={(e) => { if (e.target.files?.[0]) handleErpUpload(e.target.files[0]); }}
-                />
-                <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:bg-gray-50 transition-colors">
-                  <p className="text-4xl mb-2">📁</p>
-                  <p className="text-gray-600 font-medium">클릭하여 이미지 선택</p>
-                  <p className="text-gray-400 text-xs mt-1">PNG, JPG, GIF 지원</p>
-                </div>
-              </label>
-            )}
+                )
+              }
+            />
           </div>
 
-          {/* Factory Upload */}
-          <div className="bg-white rounded-xl border-2 border-dashed border-green-200 p-6 hover:border-green-400 transition-colors">
-            <div className="text-center mb-4">
-              <div className="text-3xl mb-2">🏗️</div>
-              <h2 className="text-lg font-bold text-gray-800">STEP 2. 공장 출고 이미지</h2>
-              <p className="text-sm text-gray-500 mt-1">중국 공장에서 받은 출고 이미지 업로드</p>
+          {/* Card 2 — Factory */}
+          <div className="rounded-2xl border border-gray-100 bg-white shadow-[0_1px_4px_rgba(0,0,0,0.06)] p-5">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="w-5 h-5 rounded-md bg-orange-50 text-orange-500 flex items-center justify-center text-[10px] font-bold">2</span>
+              <span className="text-[12px] font-medium text-gray-500 uppercase tracking-wider">공장 출고 이미지</span>
             </div>
-
-            {factoryPreview ? (
-              <div className="space-y-3">
-                <img src={factoryPreview} alt="공장 출고" className="w-full rounded-lg border object-contain max-h-48" />
-                {step === "factory-uploading" && (
-                  <div className="flex items-center gap-2 text-green-600 text-sm">
-                    <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                    </svg>
-                    AI가 출고 정보 추출 중...
+            <p className="text-[12px] text-gray-400 mb-4 ml-7">중국어 자동 번역 · 수량 · 중량 · CBM 추출</p>
+            <UploadZone
+              title="공장 출고 캡쳐"
+              hint="중국어 이미지 — AI가 자동으로 번역합니다"
+              state={factoryState}
+              onFile={(f) =>
+                uploadImage(f, "/api/ocr-factory", setFactoryState, (data) =>
+                  setShipment(data as FactoryShipmentInfo)
+                )
+              }
+              onReset={() => { setFactoryState({ status: "idle", preview: null, error: null }); setShipment(null); }}
+              summary={
+                shipment && (
+                  <div className="space-y-1.5">
+                    <SummaryRow label="출고일" value={shipment.shipDate || "—"} />
+                    {shipment.factory && <SummaryRow label="공장" value={shipment.factory} />}
+                    <SummaryRow label="품목" value={`${shipment.items?.length || 0}개 품목`} />
+                    <SummaryRow label="총 수량" value={`${shipment.totalQty?.toLocaleString() || 0}`} />
+                    {shipment.totalWeight && (
+                      <SummaryRow label="총 중량" value={`${shipment.totalWeight} KG`} />
+                    )}
+                    {shipment.totalCbm && (
+                      <SummaryRow label="총 CBM" value={`${shipment.totalCbm} CBM`} />
+                    )}
                   </div>
-                )}
-                {shipment && (
-                  <div className="bg-green-50 rounded-lg p-3 text-sm space-y-1">
-                    <p className="font-bold text-green-800">✅ 출고 정보 추출 완료</p>
-                    <p>출고일: <strong>{shipment.shipDate}</strong></p>
-                    {shipment.factory && <p>공장: <strong>{shipment.factory}</strong></p>}
-                    <p>품목 수: <strong>{shipment.items?.length || 0}개</strong></p>
-                    <p>총 수량: <strong>{shipment.totalQty?.toLocaleString()}</strong></p>
-                    {shipment.totalWeight && <p>총 중량: <strong>{shipment.totalWeight} KG</strong></p>}
-                  </div>
-                )}
-                <button
-                  className="w-full text-sm text-gray-400 hover:text-gray-600 underline"
-                  onClick={() => { setShipment(null); setFactoryPreview(null); if (factoryInputRef.current) factoryInputRef.current.value = ""; }}
-                >
-                  다시 업로드
-                </button>
-              </div>
-            ) : (
-              <label className="block cursor-pointer">
-                <input
-                  ref={factoryInputRef}
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={(e) => { if (e.target.files?.[0]) handleFactoryUpload(e.target.files[0]); }}
-                />
-                <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:bg-gray-50 transition-colors">
-                  <p className="text-4xl mb-2">📁</p>
-                  <p className="text-gray-600 font-medium">클릭하여 이미지 선택</p>
-                  <p className="text-gray-400 text-xs mt-1">중국어 이미지 자동 번역</p>
-                </div>
-              </label>
-            )}
+                )
+              }
+            />
           </div>
         </div>
 
-        {/* Document Generation */}
-        <div className={`bg-white rounded-xl border-2 p-6 transition-all ${isReady ? "border-purple-300 shadow-lg" : "border-gray-200 opacity-60"}`}>
-          <div className="text-center mb-6">
-            <div className="text-3xl mb-2">📄</div>
-            <h2 className="text-lg font-bold text-gray-800">STEP 3. 문서 자동 생성</h2>
-            {!isReady && <p className="text-sm text-gray-400 mt-1">위의 두 이미지를 먼저 업로드해주세요</p>}
-          </div>
-
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            {[
-              { docType: "marking", icon: "🇨🇳", title: "중국발주서 마킹", subtitle: "공장 전송용 PDF", color: "bg-blue-600 hover:bg-blue-700" },
-              { docType: "packing-pdf", icon: "📦", title: "패킹리스트 PDF", subtitle: "포워딩용 PDF", color: "bg-green-600 hover:bg-green-700" },
-              { docType: "packing-excel", icon: "📊", title: "패킹리스트 Excel", subtitle: "포워딩용 Excel", color: "bg-emerald-600 hover:bg-emerald-700" },
-              { docType: "receipt", icon: "🏢", title: "입고명세서", subtitle: "국내 고객사용 PDF", color: "bg-purple-600 hover:bg-purple-700" },
-            ].map((doc) => (
-              <button
-                key={doc.docType}
-                onClick={() => generateDoc(doc.docType, doc.docType)}
-                disabled={!isReady || !!generatingDoc}
-                className={`${doc.color} text-white rounded-xl p-4 text-left transition-all disabled:opacity-40 disabled:cursor-not-allowed hover:scale-105 active:scale-95`}
-              >
-                <div className="text-2xl mb-2">{generatingDoc === doc.docType ? "⏳" : doc.icon}</div>
-                <div className="font-bold text-sm">{doc.title}</div>
-                <div className="text-xs opacity-80 mt-0.5">{doc.subtitle}</div>
-              </button>
-            ))}
-          </div>
-
-          {isReady && (
-            <div className="mt-4 pt-4 border-t border-gray-100">
-              <button
-                className="w-full bg-gray-800 hover:bg-gray-900 text-white font-bold py-3 px-6 rounded-lg transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
-                disabled={!!generatingDoc}
-                onClick={async () => {
-                  for (const dt of ["marking", "packing-pdf", "packing-excel", "receipt"]) {
-                    await generateDoc(dt, dt);
-                  }
-                }}
-              >
-                🚀 전체 문서 한번에 다운로드 (4종)
-              </button>
-            </div>
-          )}
+        {/* ── Divider ── */}
+        <div className="flex items-center gap-4 mb-8">
+          <div className="flex-1 h-px bg-gray-100" />
+          <span className="text-[11px] text-gray-400 tracking-wider uppercase">문서 생성</span>
+          <div className="flex-1 h-px bg-gray-100" />
         </div>
 
-        {/* Guide */}
-        <div className="bg-blue-50 rounded-xl p-6 border border-blue-100">
-          <h3 className="font-bold text-blue-800 mb-3">📌 업무 흐름 가이드</h3>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm text-blue-700">
+        {/* ── Document buttons ── */}
+        <div className={`transition-opacity duration-300 ${isReady ? "opacity-100" : "opacity-35 pointer-events-none"}`}>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+            {DOCS.map((doc) => {
+              const isLoading = downloading === doc.id;
+              return (
+                <button
+                  key={doc.id}
+                  onClick={() => downloadDoc(doc.id)}
+                  disabled={!!downloading}
+                  className={`
+                    relative group flex flex-col justify-between
+                    h-[108px] rounded-xl px-4 py-3.5
+                    ${doc.color} text-white
+                    transition-all duration-150
+                    disabled:opacity-60 disabled:cursor-not-allowed
+                    active:scale-[0.97]
+                  `}
+                >
+                  {/* ext badge */}
+                  <span className="self-end text-[9px] font-semibold tracking-widest uppercase bg-white/15 rounded-md px-1.5 py-0.5 w-fit">
+                    {doc.ext}
+                  </span>
+
+                  <div className="mt-auto">
+                    <p className="text-[13px] font-semibold leading-tight">{doc.label}</p>
+                    <p className="text-[11px] text-white/60 mt-0.5">{doc.sublabel}</p>
+                  </div>
+
+                  {/* download icon or spinner */}
+                  <div className="absolute top-3 left-4">
+                    {isLoading
+                      ? <IconSpinner size={14} />
+                      : <span className="text-white/40 group-hover:text-white/70 transition-colors"><IconDownload /></span>
+                    }
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* All download */}
+          <button
+            onClick={downloadAll}
+            disabled={!!downloading}
+            className="w-full h-12 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 text-[13px] font-medium transition-all duration-150 flex items-center justify-center gap-2 active:scale-[0.99] disabled:opacity-50"
+          >
+            {downloading ? (
+              <><IconSpinner size={14} /> 생성 중...</>
+            ) : (
+              <><IconFile /> 전체 문서 다운로드 (4종)</>
+            )}
+          </button>
+        </div>
+
+        {/* ── Empty state hint ── */}
+        {!isReady && (
+          <p className="text-center text-[12px] text-gray-400 mt-4">
+            {!order && !shipment
+              ? "위에서 두 이미지를 업로드하면 문서 생성 버튼이 활성화됩니다"
+              : !order
+              ? "ERP 수주 화면 이미지를 업로드해주세요"
+              : "공장 출고 이미지를 업로드해주세요"}
+          </p>
+        )}
+
+        {/* ── How it works ── */}
+        <div className="mt-16 pt-8 border-t border-gray-100">
+          <p className="text-[11px] font-medium text-gray-400 uppercase tracking-widest mb-6">사용 방법</p>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
             {[
-              { n: "1", text: "ERP 수주 화면 캡쳐 업로드", icon: "📋" },
-              { n: "2", text: "공장 출고 이미지 업로드", icon: "🏗️" },
-              { n: "3", text: "AI 자동 정보 추출 및 번역", icon: "🤖" },
-              { n: "4", text: "필요 문서 선택하여 다운로드", icon: "📥" },
+              { n: "01", title: "ERP 캡쳐", desc: "ERP 수주 화면을 스크린샷으로 저장 후 업로드" },
+              { n: "02", title: "공장 이미지", desc: "중국 공장에서 받은 출고 이미지 업로드" },
+              { n: "03", title: "AI 추출", desc: "GPT-4o가 한·중 양쪽 정보를 자동으로 인식" },
+              { n: "04", title: "문서 다운로드", desc: "필요한 문서를 선택하거나 전체 다운로드" },
             ].map((item) => (
-              <div key={item.n} className="flex items-start gap-2">
-                <span className="bg-blue-200 text-blue-800 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5">{item.n}</span>
-                <span>{item.icon} {item.text}</span>
+              <div key={item.n} className="flex flex-col gap-2">
+                <span className="text-[22px] font-bold text-gray-100 tracking-tight">{item.n}</span>
+                <p className="text-[13px] font-semibold text-gray-800">{item.title}</p>
+                <p className="text-[12px] text-gray-500 leading-relaxed">{item.desc}</p>
               </div>
             ))}
           </div>
         </div>
       </main>
 
-      <footer className="text-center py-6 text-gray-400 text-sm">
-        씨앤씨무역 물류 자동화 시스템 v1.0 · Powered by Claude AI
+      {/* ── Footer ── */}
+      <footer className="border-t border-gray-100 mt-16">
+        <div className="max-w-5xl mx-auto px-6 py-6 flex items-center justify-between">
+          <span className="text-[11px] text-gray-400">씨앤씨무역 물류 자동화 시스템</span>
+          <span className="text-[11px] text-gray-300">Powered by GPT-4o Vision</span>
+        </div>
       </footer>
     </div>
   );

@@ -1,27 +1,26 @@
-import Anthropic from "@anthropic-ai/sdk";
+import OpenAI from "openai";
 import { OrderInfo, FactoryShipmentInfo } from "@/types";
 
-const client = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-});
+function getClient() {
+  return new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+}
 
 export async function extractOrderFromERP(
   imageBase64: string,
   mediaType: string
 ): Promise<OrderInfo> {
-  const response = await client.messages.create({
-    model: "claude-sonnet-4-6",
+  const response = await getClient().chat.completions.create({
+    model: "gpt-4o",
     max_tokens: 4096,
     messages: [
       {
         role: "user",
         content: [
           {
-            type: "image",
-            source: {
-              type: "base64",
-              media_type: mediaType as "image/jpeg" | "image/png" | "image/gif" | "image/webp",
-              data: imageBase64,
+            type: "image_url",
+            image_url: {
+              url: `data:${mediaType};base64,${imageBase64}`,
+              detail: "high",
             },
           },
           {
@@ -60,15 +59,12 @@ export async function extractOrderFromERP(
     ],
   });
 
-  const text = response.content[0].type === "text" ? response.content[0].text : "";
+  const text = response.choices[0]?.message?.content || "";
   try {
     return JSON.parse(text) as OrderInfo;
   } catch {
-    // Try to extract JSON from the response
     const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      return JSON.parse(jsonMatch[0]) as OrderInfo;
-    }
+    if (jsonMatch) return JSON.parse(jsonMatch[0]) as OrderInfo;
     throw new Error("ERP 이미지에서 수주 정보를 추출하지 못했습니다.");
   }
 }
@@ -77,19 +73,18 @@ export async function extractShipmentFromFactory(
   imageBase64: string,
   mediaType: string
 ): Promise<FactoryShipmentInfo> {
-  const response = await client.messages.create({
-    model: "claude-sonnet-4-6",
+  const response = await getClient().chat.completions.create({
+    model: "gpt-4o",
     max_tokens: 4096,
     messages: [
       {
         role: "user",
         content: [
           {
-            type: "image",
-            source: {
-              type: "base64",
-              media_type: mediaType as "image/jpeg" | "image/png" | "image/gif" | "image/webp",
-              data: imageBase64,
+            type: "image_url",
+            image_url: {
+              url: `data:${mediaType};base64,${imageBase64}`,
+              detail: "high",
             },
           },
           {
@@ -126,14 +121,12 @@ export async function extractShipmentFromFactory(
     ],
   });
 
-  const text = response.content[0].type === "text" ? response.content[0].text : "";
+  const text = response.choices[0]?.message?.content || "";
   try {
     return JSON.parse(text) as FactoryShipmentInfo;
   } catch {
     const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      return JSON.parse(jsonMatch[0]) as FactoryShipmentInfo;
-    }
+    if (jsonMatch) return JSON.parse(jsonMatch[0]) as FactoryShipmentInfo;
     throw new Error("공장 출고 이미지에서 정보를 추출하지 못했습니다.");
   }
 }
