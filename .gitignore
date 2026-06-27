@@ -1,4 +1,5 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+# 씨앤씨무역 - .env.local 파일에 API 키가 있으므로 절대 올리지 마세요!
 
 # dependencies
 /node_modules
