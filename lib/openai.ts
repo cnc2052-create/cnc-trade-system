@@ -1,14 +1,14 @@
 import OpenAI from "openai";
-import { OrderInfo, FactoryShipmentInfo } from "@/types";
+import { CustomerQuote } from "@/types";
 
 function getClient() {
   return new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 }
 
-export async function extractOrderFromERP(
+export async function extractQuote(
   imageBase64: string,
   mediaType: string
-): Promise<OrderInfo> {
+): Promise<CustomerQuote> {
   const response = await getClient().chat.completions.create({
     model: "gpt-4o",
     max_tokens: 4096,
@@ -25,34 +25,35 @@ export async function extractOrderFromERP(
           },
           {
             type: "text",
-            text: `이 이미지는 씨앤씨무역의 ERP 수주 화면입니다.
-이미지에서 다음 정보를 추출하여 JSON 형식으로 반환해주세요.
-반드시 아래 형식의 순수 JSON만 반환하고, 마크다운 코드블록 없이 JSON만 출력하세요:
+            text: `이 이미지는 고객사 발주 견적서입니다.
+아래 JSON 형식으로 정보를 추출해주세요. 마크다운 없이 순수 JSON만 반환하세요.
 
 {
-  "orderNo": "수주번호",
-  "orderDate": "수주일자 (YYYY-MM-DD)",
+  "quoteNo": "견적번호 또는 발주번호",
+  "quoteDate": "날짜 (YYYY-MM-DD)",
   "customer": "고객사명",
-  "customerAddr": "고객사 주소 (있으면)",
   "deliveryDate": "납기일 (YYYY-MM-DD, 있으면)",
-  "currency": "통화 (KRW/USD/CNY)",
+  "currency": "통화 (KRW/USD/CNY, 기본 KRW)",
   "items": [
     {
+      "no": 순번(숫자),
       "productName": "제품명",
-      "productNameCn": "중국어 제품명 (있으면)",
       "spec": "규격 (있으면)",
-      "unit": "단위",
+      "postProcess": "후가공 내용 (있으면, 없으면 빈문자열)",
       "quantity": 수량(숫자),
+      "unit": "단위 (EA/PCS/SET 등)",
       "unitPrice": 단가(숫자),
       "amount": 금액(숫자),
-      "marking": "마킹 (있으면)"
+      "deliveryDate": "해당 품목 납기 (YYYY-MM-DD, 있으면)",
+      "remarks": "비고 (있으면)"
     }
   ],
-  "totalAmount": 합계금액(숫자),
-  "remarks": "비고 (있으면)"
+  "totalAmount": 합계(숫자),
+  "remarks": "전체 비고 (있으면)"
 }
 
-항목이 명확하지 않은 경우 빈 문자열이나 0을 사용하세요.`,
+후가공은 도금, 도장, 아노다이징, 열처리, 용접 등 표면처리/가공 내용을 의미합니다.
+숫자는 반드시 숫자 타입으로, 없는 항목은 빈 문자열 또는 0으로 반환하세요.`,
           },
         ],
       },
@@ -61,72 +62,10 @@ export async function extractOrderFromERP(
 
   const text = response.choices[0]?.message?.content || "";
   try {
-    return JSON.parse(text) as OrderInfo;
+    return JSON.parse(text) as CustomerQuote;
   } catch {
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (jsonMatch) return JSON.parse(jsonMatch[0]) as OrderInfo;
-    throw new Error("ERP 이미지에서 수주 정보를 추출하지 못했습니다.");
-  }
-}
-
-export async function extractShipmentFromFactory(
-  imageBase64: string,
-  mediaType: string
-): Promise<FactoryShipmentInfo> {
-  const response = await getClient().chat.completions.create({
-    model: "gpt-4o",
-    max_tokens: 4096,
-    messages: [
-      {
-        role: "user",
-        content: [
-          {
-            type: "image_url",
-            image_url: {
-              url: `data:${mediaType};base64,${imageBase64}`,
-              detail: "high",
-            },
-          },
-          {
-            type: "text",
-            text: `이 이미지는 중국 공장에서 보낸 출고 정보입니다 (중국어).
-이미지에서 다음 정보를 추출하여 JSON 형식으로 반환해주세요.
-반드시 아래 형식의 순수 JSON만 반환하고, 마크다운 코드블록 없이 JSON만 출력하세요:
-
-{
-  "shipDate": "출고일 (YYYY-MM-DD)",
-  "factory": "공장명 (있으면)",
-  "items": [
-    {
-      "productName": "제품명 (한국어로 번역)",
-      "productNameCn": "중국어 원문 제품명",
-      "spec": "규격",
-      "quantity": 수량(숫자),
-      "unit": "단위",
-      "cartons": 박스수(숫자, 있으면),
-      "weight": 중량kg(숫자, 있으면),
-      "cbm": CBM(숫자, 있으면)
-    }
-  ],
-  "totalQty": 총수량(숫자),
-  "totalWeight": 총중량kg(숫자, 있으면),
-  "totalCbm": 총CBM(숫자, 있으면),
-  "remarks": "비고 (있으면)"
-}
-
-중국어를 한국어로 번역하고, 숫자는 반드시 숫자 타입으로 반환하세요.`,
-          },
-        ],
-      },
-    ],
-  });
-
-  const text = response.choices[0]?.message?.content || "";
-  try {
-    return JSON.parse(text) as FactoryShipmentInfo;
-  } catch {
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (jsonMatch) return JSON.parse(jsonMatch[0]) as FactoryShipmentInfo;
-    throw new Error("공장 출고 이미지에서 정보를 추출하지 못했습니다.");
+    const match = text.match(/\{[\s\S]*\}/);
+    if (match) return JSON.parse(match[0]) as CustomerQuote;
+    throw new Error("견적서에서 정보를 추출하지 못했습니다.");
   }
 }

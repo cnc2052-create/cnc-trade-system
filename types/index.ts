@@ -1,55 +1,40 @@
-export interface OrderItem {
-  productName: string;      // 제품명
-  productNameCn?: string;   // 중국어 제품명
-  spec?: string;            // 규격
-  unit: string;             // 단위
-  quantity: number;         // 수량
-  unitPrice: number;        // 단가
-  amount: number;           // 금액
-  marking?: string;         // 마킹 내용
-}
-
-export interface OrderInfo {
-  orderNo: string;          // 수주번호
-  orderDate: string;        // 수주일자
-  customer: string;         // 고객사
-  customerAddr?: string;    // 고객사 주소
-  deliveryDate?: string;    // 납기일
-  items: OrderItem[];
-  totalAmount: number;
-  currency: string;         // KRW / USD / CNY
-  remarks?: string;
-}
-
-export interface FactoryShipmentInfo {
-  shipDate: string;         // 출고일
-  factory?: string;         // 공장명
-  items: FactoryItem[];
-  totalQty: number;
-  totalWeight?: number;     // 총 중량 (kg)
-  totalCbm?: number;        // 총 부피 (CBM)
-  remarks?: string;
-}
-
-export interface FactoryItem {
-  productName: string;
-  productNameCn?: string;
-  spec?: string;
-  quantity: number;
-  unit: string;
-  weight?: number;
-  cbm?: number;
-  cartons?: number;         // 박스 수
-}
-
-export interface PackingListItem {
+// 고객 견적서에서 추출된 품목
+export interface QuoteItem {
   no: number;
-  productName: string;
-  spec?: string;
+  productName: string;    // 제품명
+  spec?: string;          // 규격
+  postProcess?: string;   // 후가공
+  quantity: number;       // 수량
+  unit: string;           // 단위
+  unitPrice: number;      // 단가
+  amount: number;         // 금액
+  deliveryDate?: string;  // 납기
+  remarks?: string;
+}
+
+// 고객 견적서 전체
+export interface CustomerQuote {
+  quoteNo: string;
+  quoteDate: string;
+  customer: string;
+  deliveryDate?: string;
+  currency: string;
+  items: QuoteItem[];
+  totalAmount: number;
+  remarks?: string;
+}
+
+// 마킹 항목 (사용자가 제품명 직접 입력 + 부품 단가)
+export interface MarkingEntry {
+  itemNo: number;           // QuoteItem.no 참조
+  productName: string;      // 원래 제품명 (견적서에서)
+  markingName: string;      // 마킹용 제품명 (사용자 입력)
+  postProcess: string;      // 후가공
   quantity: number;
   unit: string;
-  cartons?: number;
-  weight?: number;
-  cbm?: number;
-  marking?: string;
+  unitPrice: number;        // 발주 단가
+  amount: number;
+  deliveryDate: string;
+  partUnitPrice?: number;   // 부품별 단가 (패킹리스트용, 사용자 입력)
+  partAmount?: number;      // partUnitPrice * quantity
 }

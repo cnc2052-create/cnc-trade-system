@@ -1,65 +1,53 @@
 import { NextRequest, NextResponse } from "next/server";
-import { generateMarkingPDF, generatePackingListPDF, generateReceiptPDF } from "@/lib/pdf-generators";
-import { generatePackingListExcel } from "@/lib/excel-generators";
-import { OrderInfo, FactoryShipmentInfo } from "@/types";
+import {
+  generateChinaOrderExcel,
+  generatePackingListExcel,
+  generateReceiptExcel,
+} from "@/lib/excel-generators";
+import { CustomerQuote, MarkingEntry } from "@/types";
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json() as {
-      docType: "marking" | "packing-pdf" | "packing-excel" | "receipt";
-      order: OrderInfo;
-      shipment: FactoryShipmentInfo;
+      docType: "china-order" | "packing" | "receipt";
+      quote: CustomerQuote;
+      markings: MarkingEntry[];
     };
 
-    const { docType, order, shipment } = body;
-
-    if (!order || !shipment) {
-      return NextResponse.json({ error: "수주 정보와 출고 정보가 필요합니다." }, { status: 400 });
+    const { docType, quote, markings } = body;
+    if (!quote || !markings) {
+      return NextResponse.json({ error: "데이터가 부족합니다." }, { status: 400 });
     }
 
     let buffer: Buffer;
     let filename: string;
-    let contentType: string;
 
     switch (docType) {
-      case "marking":
-        buffer = generateMarkingPDF(order);
-        filename = `marking_${order.orderNo}_${order.orderDate}.pdf`;
-        contentType = "application/pdf";
+      case "china-order":
+        buffer = generateChinaOrderExcel(quote, markings);
+        filename = `중국발주서_${quote.quoteNo}_${quote.quoteDate}.xlsx`;
         break;
-
-      case "packing-pdf":
-        buffer = generatePackingListPDF(order, shipment);
-        filename = `packing_list_${order.orderNo}_${shipment.shipDate}.pdf`;
-        contentType = "application/pdf";
+      case "packing":
+        buffer = generatePackingListExcel(quote, markings);
+        filename = `패킹리스트_${quote.quoteNo}_${quote.quoteDate}.xlsx`;
         break;
-
-      case "packing-excel":
-        buffer = generatePackingListExcel(order, shipment);
-        filename = `packing_list_${order.orderNo}_${shipment.shipDate}.xlsx`;
-        contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
-        break;
-
       case "receipt":
-        buffer = generateReceiptPDF(order, shipment);
-        filename = `receipt_${order.orderNo}_${shipment.shipDate}.pdf`;
-        contentType = "application/pdf";
+        buffer = generateReceiptExcel(quote, markings);
+        filename = `입고명세서_${quote.quoteNo}_${quote.quoteDate}.xlsx`;
         break;
-
       default:
-        return NextResponse.json({ error: "올바르지 않은 문서 타입입니다." }, { status: 400 });
+        return NextResponse.json({ error: "잘못된 문서 타입" }, { status: 400 });
     }
 
     return new NextResponse(buffer as unknown as BodyInit, {
       headers: {
-        "Content-Type": contentType,
+        "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`,
       },
     });
   } catch (err) {
-    console.error("Document generation error:", err);
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : "문서 생성 중 오류가 발생했습니다." },
+      { error: err instanceof Error ? err.message : "문서 생성 오류" },
       { status: 500 }
     );
   }
