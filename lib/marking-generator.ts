@@ -1,47 +1,42 @@
-import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
 import { MarkingEntry, CustomerQuote } from "@/types";
 
-export function generateMarkingExcel(
+export async function generateMarkingExcel(
   quote: CustomerQuote,
   markings: MarkingEntry[]
-): Buffer {
-  const wb = XLSX.utils.book_new();
+): Promise<Buffer> {
+  const wb = new ExcelJS.Workbook();
 
-  markings.forEach((m, idx) => {
+  for (let idx = 0; idx < markings.length; idx++) {
+    const m = markings[idx];
     const label = m.markingName || m.productName;
+    const sheetName = `${idx + 1}_${label}`.replace(/[\\\/\?\*\[\]:]/g, "").slice(0, 31);
 
-    const ws: XLSX.WorkSheet = {};
+    const ws = wb.addWorksheet(sheetName);
 
-    // A1: C&C
-    ws["A1"] = { v: "C&C", t: "s" };
-    // A2: ITEM
-    ws["A2"] = { v: `   ITEM:${label}`, t: "s" };
-    // A3: Q`TY — 공장이 수정할 값, 수량을 힌트로만 표기
-    ws["A3"] = { v: `    Q\`TY:              pcs    `, t: "s" };
-    // A4: C/NO — 공장이 수정
-    ws["A4"] = { v: `    C/NO:`, t: "s" };
-    // A5: 고객사
-    ws["A5"] = { v: quote.customer, t: "s" };
-    // A6: MADE IN CHINA
-    ws["A6"] = { v: "MADE  IN  CHINA", t: "s" };
+    // 열 너비 설정 (A열만 사용, 매우 넓게)
+    ws.getColumn(1).width = 50;
 
-    ws["!ref"] = "A1:A6";
-
-    // 원본과 동일한 열 너비 / 행 높이
-    ws["!cols"] = [{ wpx: 1073, wch: 133.5 }];
-    ws["!rows"] = [
-      { hpt: 76.5, hpx: 76.5 }, // A1
-      { hpt: 76.5, hpx: 76.5 }, // A2
-      { hpt: 76.5, hpx: 76.5 }, // A3
-      { hpt: 76.5, hpx: 76.5 }, // A4
-      { hpt: 93,   hpx: 93   }, // A5
-      { hpt: 76.5, hpx: 76.5 }, // A6
+    // 행 높이 & 내용
+    const rows = [
+      { text: "C&C", height: 57.75 },
+      { text: `   ITEM:${label}`, height: 57.75 },
+      { text: "    Q`TY:              pcs    ", height: 57.75 },
+      { text: "    C/NO:", height: 57.75 },
+      { text: quote.customer, height: 70 },
+      { text: "MADE  IN  CHINA", height: 57.75 },
     ];
 
-    // 시트명: 품목번호_마킹명 (31자 이내)
-    const sheetName = `${idx + 1}_${label}`.slice(0, 31);
-    XLSX.utils.book_append_sheet(wb, ws, sheetName);
-  });
+    rows.forEach((r, i) => {
+      const row = ws.getRow(i + 1);
+      row.height = r.height;
+      const cell = row.getCell(1);
+      cell.value = r.text;
+      cell.font = { name: "Arial", size: 28, bold: i === 0 || i === rows.length - 1 };
+      cell.alignment = { vertical: "middle", horizontal: "left" };
+    });
+  }
 
-  return Buffer.from(XLSX.write(wb, { type: "buffer", bookType: "xlsx" }));
+  const buffer = await wb.xlsx.writeBuffer();
+  return Buffer.from(buffer);
 }
