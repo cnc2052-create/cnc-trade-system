@@ -1,10 +1,12 @@
 import OpenAI from "openai";
 import { CustomerQuote } from "@/types";
+import { FactoryShipment } from "./packing-generator";
 
 function getClient() {
   return new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 }
 
+/* ── 고객 견적서 추출 ── */
 export async function extractQuote(
   imageBase64: string,
   mediaType: string
@@ -12,20 +14,11 @@ export async function extractQuote(
   const response = await getClient().chat.completions.create({
     model: "gpt-4o",
     max_tokens: 4096,
-    messages: [
-      {
-        role: "user",
-        content: [
-          {
-            type: "image_url",
-            image_url: {
-              url: `data:${mediaType};base64,${imageBase64}`,
-              detail: "high",
-            },
-          },
-          {
-            type: "text",
-            text: `이 이미지는 고객사 발주 견적서입니다.
+    messages: [{
+      role: "user",
+      content: [
+        { type: "image_url", image_url: { url: `data:${mediaType};base64,${imageBase64}`, detail: "high" } },
+        { type: "text", text: `이 이미지는 고객사 발주 견적서입니다.
 아래 JSON 형식으로 정보를 추출해주세요. 마크다운 없이 순수 JSON만 반환하세요.
 
 {
@@ -39,7 +32,7 @@ export async function extractQuote(
       "no": 순번(숫자),
       "productName": "제품명",
       "spec": "규격 (있으면)",
-      "postProcess": "후가공 내용 (있으면, 없으면 빈문자열)",
+      "postProcess": "후가공 내용 (도금/도장/아노다이징/실크인쇄 등, 없으면 빈문자열)",
       "quantity": 수량(숫자),
       "unit": "단위 (EA/PCS/SET 등)",
       "unitPrice": 단가(숫자),
@@ -52,20 +45,63 @@ export async function extractQuote(
   "remarks": "전체 비고 (있으면)"
 }
 
-후가공은 도금, 도장, 아노다이징, 열처리, 용접 등 표면처리/가공 내용을 의미합니다.
-숫자는 반드시 숫자 타입으로, 없는 항목은 빈 문자열 또는 0으로 반환하세요.`,
-          },
-        ],
-      },
-    ],
+숫자는 반드시 숫자 타입으로, 없는 항목은 빈 문자열 또는 0으로 반환하세요.` },
+      ],
+    }],
   });
 
   const text = response.choices[0]?.message?.content || "";
-  try {
-    return JSON.parse(text) as CustomerQuote;
-  } catch {
-    const match = text.match(/\{[\s\S]*\}/);
-    if (match) return JSON.parse(match[0]) as CustomerQuote;
-    throw new Error("견적서에서 정보를 추출하지 못했습니다.");
+  try { return JSON.parse(text) as CustomerQuote; }
+  catch {
+    const m = text.match(/\{[\s\S]*\}/);
+    if (m) return JSON.parse(m[0]) as CustomerQuote;
+    throw new Error("견적서 정보 추출 실패");
+  }
+}
+
+/* ── 중국 공장 출고 이미지 추출 ── */
+export async function extractFactoryShipment(
+  imageBase64: string,
+  mediaType: string
+): Promise<FactoryShipment> {
+  const response = await getClient().chat.completions.create({
+    model: "gpt-4o",
+    max_tokens: 4096,
+    messages: [{
+      role: "user",
+      content: [
+        { type: "image_url", image_url: { url: `data:${mediaType};base64,${imageBase64}`, detail: "high" } },
+        { type: "text", text: `이 이미지는 중국 공장에서 보낸 출고(패킹) 정보입니다.
+아래 JSON 형식으로 추출하세요. 순수 JSON만 반환하세요.
+
+{
+  "shipDate": "출고일 (YYYY-MM-DD)",
+  "factory": "공장명 (있으면, 없으면 빈문자열)",
+  "items": [
+    {
+      "itemNameCn": "중국어 원문 제품명",
+      "itemNameEn": "영문 번역 제품명 (Bottle/Pump/Cap/Tube/Jar 등 물류 용어)",
+      "material": "재질 (PET/PP/ABS/PE/HDPE 등)",
+      "packingBreakdown": "포장 방식 (예: 1914 × 5 + 470, 숫자와 × 기호 사용)",
+      "quantity": 총수량(숫자),
+      "cartons": 총박스수(숫자)
+    }
+  ]
+}
+
+packingBreakdown 형식: [박스당수량] × [박스수] + [나머지수량]
+예: 1,914개씩 5박스 + 470개 나머지 → "1914 × 5 + 470"
+재질이 불명확하면 중국어에서 추론하세요.
+숫자는 반드시 숫자 타입으로 반환하세요.` },
+      ],
+    }],
+  });
+
+  const text = response.choices[0]?.message?.content || "";
+  try { return JSON.parse(text) as FactoryShipment; }
+  catch {
+    const m = text.match(/\{[\s\S]*\}/);
+    if (m) return JSON.parse(m[0]) as FactoryShipment;
+    throw new Error("공장 출고 정보 추출 실패");
   }
 }

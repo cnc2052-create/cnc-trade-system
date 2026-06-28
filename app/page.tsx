@@ -2,6 +2,7 @@
 
 import { useState, useRef, useCallback } from "react";
 import { CustomerQuote, MarkingEntry } from "@/types";
+import { FactoryShipment } from "@/lib/packing-generator";
 
 /* ── icons ── */
 function Spinner({ size = 16 }: { size?: number }) {
@@ -12,448 +13,488 @@ function Spinner({ size = 16 }: { size?: number }) {
     </svg>
   );
 }
-
-function IconUpload() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-      <path d="M9 12V4M9 4L6.5 6.5M9 4L11.5 6.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M3 13.5v1.5a1 1 0 001 1h10a1 1 0 001-1v-1.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-    </svg>
-  );
+function IcoUp() {
+  return <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M9 12V4M9 4L6.5 6.5M9 4L11.5 6.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/><path d="M3 13.5v1.5a1 1 0 001 1h10a1 1 0 001-1v-1.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>;
+}
+function IcoDl() {
+  return <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1v8M7 9L4.5 6.5M7 9L9.5 6.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/><path d="M1.5 11.5h11" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>;
+}
+function IcoCheck() {
+  return <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><path d="M1.5 5.5l3 3 5-5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>;
 }
 
-function IconCheck() {
-  return (
-    <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-      <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function IconDownload() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-      <path d="M7 1v8M7 9L4.5 6.5M7 9L9.5 6.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M1.5 11.5h11" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-/* ── step badge ── */
-function StepBadge({ n, active, done }: { n: number; active: boolean; done: boolean }) {
-  return (
-    <span className={`
-      w-7 h-7 rounded-full flex items-center justify-center text-[12px] font-semibold flex-shrink-0 transition-all
-      ${done ? "bg-zinc-900 text-white" : active ? "bg-zinc-900 text-white" : "bg-gray-100 text-gray-400"}
-    `}>
-      {done ? <IconCheck /> : n}
-    </span>
-  );
-}
-
-/* ── section wrapper ── */
-function Section({
-  step, title, subtitle, active, done, children,
+/* ── 공용 업로드존 ── */
+function UploadZone({
+  hint, preview, uploading, error, onFile,
 }: {
-  step: number; title: string; subtitle: string;
-  active: boolean; done: boolean; children: React.ReactNode;
+  hint: string; preview: string | null; uploading: boolean; error: string | null;
+  onFile: (f: File) => void;
 }) {
-  return (
-    <div className={`rounded-2xl border transition-all duration-200 ${active || done ? "border-gray-200 bg-white shadow-[0_1px_6px_rgba(0,0,0,0.06)]" : "border-gray-100 bg-gray-50/50"}`}>
-      <div className="px-6 py-5 flex items-start gap-3">
-        <StepBadge n={step} active={active} done={done} />
-        <div className="flex-1 min-w-0">
-          <h2 className="text-[14px] font-semibold text-gray-900 tracking-tight">{title}</h2>
-          <p className="text-[12px] text-gray-400 mt-0.5">{subtitle}</p>
-          {(active || done) && <div className="mt-5">{children}</div>}
-        </div>
-      </div>
+  const ref = useRef<HTMLInputElement>(null);
+  const [drag, setDrag] = useState(false);
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault(); setDrag(false);
+    const f = e.dataTransfer.files[0];
+    if (f?.type.startsWith("image/")) onFile(f);
+  }, [onFile]);
+
+  if (uploading) return (
+    <div className="h-36 rounded-xl border border-gray-100 bg-gray-50 flex flex-col items-center justify-center gap-2">
+      {preview && <img src={preview} className="h-16 object-contain opacity-20 rounded" alt="" />}
+      <div className="flex items-center gap-2 text-[12px] text-gray-400"><Spinner size={14} /> AI가 정보를 추출 중...</div>
     </div>
   );
-}
 
-/* ── input field ── */
-function Field({ label, value, onChange, placeholder, type = "text" }: {
-  label: string; value: string | number; onChange: (v: string) => void;
-  placeholder?: string; type?: string;
-}) {
   return (
-    <div className="flex flex-col gap-1">
-      <label className="text-[11px] font-medium text-gray-500">{label}</label>
-      <input
-        type={type}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        className="h-9 px-3 rounded-lg border border-gray-200 text-[13px] text-gray-900 bg-white focus:outline-none focus:border-gray-400 transition-colors placeholder:text-gray-300"
-      />
-    </div>
-  );
-}
-
-/* ── download button ── */
-function DownloadBtn({ label, onClick, loading, disabled }: {
-  label: string; onClick: () => void; loading: boolean; disabled: boolean;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled || loading}
-      className="flex items-center gap-2 h-10 px-5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white text-[13px] font-medium transition-all disabled:opacity-40 disabled:cursor-not-allowed active:scale-[0.98]"
+    <label
+      onDragOver={e => { e.preventDefault(); setDrag(true); }}
+      onDragLeave={() => setDrag(false)}
+      onDrop={handleDrop}
+      className={`flex flex-col items-center justify-center gap-2.5 h-36 rounded-xl border-[1.5px] border-dashed cursor-pointer transition-all
+        ${drag ? "border-gray-400 bg-gray-50" : "border-gray-200 bg-gray-50/40 hover:border-gray-300 hover:bg-gray-50"}`}
     >
-      {loading ? <Spinner size={14} /> : <IconDownload />}
+      <input ref={ref} type="file" accept="image/*" className="sr-only"
+        onChange={e => { if (e.target.files?.[0]) onFile(e.target.files[0]); }} />
+      <div className="w-8 h-8 rounded-lg bg-white border border-gray-200 shadow-sm flex items-center justify-center text-gray-400"><IcoUp /></div>
+      <div className="text-center">
+        <p className="text-[12px] font-medium text-gray-600">클릭하거나 드래그하여 업로드</p>
+        <p className="text-[10px] text-gray-400 mt-0.5">{hint}</p>
+      </div>
+      {error && <p className="text-[10px] text-red-500">{error}</p>}
+    </label>
+  );
+}
+
+/* ── 다운로드 버튼 ── */
+function DlBtn({ label, ext, loading, disabled, onClick }: {
+  label: string; ext: string; loading: boolean; disabled: boolean; onClick: () => void;
+}) {
+  return (
+    <button onClick={onClick} disabled={disabled || loading}
+      className="flex items-center gap-2 h-9 px-4 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white text-[12px] font-medium transition-all disabled:opacity-35 disabled:cursor-not-allowed active:scale-[0.97]">
+      {loading ? <Spinner size={13} /> : <IcoDl />}
       {label}
+      <span className="text-[9px] bg-white/15 rounded px-1.5 py-0.5 font-bold tracking-wider">{ext}</span>
     </button>
   );
 }
 
-/* ─────────────────────────── MAIN ─────────────────────────── */
+/* ── 입력 필드 ── */
+function Field({ label, value, onChange, placeholder, type = "text", small = false }: {
+  label: string; value: string | number; onChange: (v: string) => void;
+  placeholder?: string; type?: string; small?: boolean;
+}) {
+  return (
+    <div className="flex flex-col gap-1">
+      <label className="text-[10px] font-medium text-gray-400 uppercase tracking-wide">{label}</label>
+      <input type={type} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder}
+        className={`${small ? "h-8 text-[12px]" : "h-9 text-[13px]"} px-3 rounded-lg border border-gray-200 text-gray-900 bg-white focus:outline-none focus:border-gray-400 transition-colors placeholder:text-gray-300`} />
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════ MAIN ═══════════════════════════════════════════════ */
 export default function Page() {
+  /* ── 탭 ── */
+  const [tab, setTab] = useState<"order" | "shipment">("order");
+
+  /* ── 워크플로우 A: 수주 ── */
   const [quote, setQuote] = useState<CustomerQuote | null>(null);
-  const [preview, setPreview] = useState<string | null>(null);
-  const [uploading, setUploading] = useState(false);
-  const [uploadError, setUploadError] = useState<string | null>(null);
-
+  const [quotePreview, setQuotePreview] = useState<string | null>(null);
+  const [quoteUploading, setQuoteUploading] = useState(false);
+  const [quoteError, setQuoteError] = useState<string | null>(null);
   const [markings, setMarkings] = useState<MarkingEntry[]>([]);
-  const [downloading, setDownloading] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [dlA, setDlA] = useState<string | null>(null);
 
-  const inputRef = useRef<HTMLInputElement>(null);
-  const [dragging, setDragging] = useState(false);
+  /* ── 워크플로우 B: 출고 ── */
+  const [shipment, setShipment] = useState<FactoryShipment | null>(null);
+  const [shipPreview, setShipPreview] = useState<string | null>(null);
+  const [shipUploading, setShipUploading] = useState(false);
+  const [shipError, setShipError] = useState<string | null>(null);
+  const [dlB, setDlB] = useState<string | null>(null);
 
-  /* step 계산 */
-  const step = quote === null ? 1 : markings.every(m => m.markingName) ? (markings.some(m => m.partUnitPrice) ? 4 : 3) : 2;
+  const [globalError, setGlobalError] = useState<string | null>(null);
+
+  /* ── 유틸 ── */
   const hasMarkingNames = markings.length > 0 && markings.every(m => m.markingName.trim());
-  const hasPartPrices = markings.length > 0 && markings.some(m => (m.partUnitPrice ?? 0) > 0);
 
   /* ── 견적서 업로드 ── */
-  async function handleFile(file: File) {
-    setUploadError(null);
-    setUploading(true);
-    setPreview(URL.createObjectURL(file));
+  async function handleQuoteFile(file: File) {
+    setQuoteError(null); setQuoteUploading(true);
+    setQuotePreview(URL.createObjectURL(file));
     try {
-      const fd = new FormData();
-      fd.append("image", file);
+      const fd = new FormData(); fd.append("image", file);
       const res = await fetch("/api/ocr-quote", { method: "POST", body: fd });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error);
       const q: CustomerQuote = json.data;
       setQuote(q);
-      // 마킹 초기값 세팅
       setMarkings(q.items.map(item => ({
-        itemNo: item.no,
-        productName: item.productName,
-        markingName: "",
-        postProcess: item.postProcess || "",
-        quantity: item.quantity,
-        unit: item.unit,
-        unitPrice: item.unitPrice,
-        amount: item.amount,
+        itemNo: item.no, productName: item.productName,
+        markingName: "", postProcess: item.postProcess || "",
+        quantity: item.quantity, unit: item.unit,
+        unitPrice: item.unitPrice, amount: item.amount,
         deliveryDate: item.deliveryDate || q.deliveryDate || "",
-        partUnitPrice: undefined,
-        partAmount: undefined,
       })));
-    } catch (e) {
-      setUploadError(e instanceof Error ? e.message : "업로드 오류");
-      setPreview(null);
-    } finally {
-      setUploading(false);
-    }
+    } catch (e) { setQuoteError(e instanceof Error ? e.message : "오류"); setQuotePreview(null); }
+    finally { setQuoteUploading(false); }
   }
 
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setDragging(false);
-    const file = e.dataTransfer.files[0];
-    if (file?.type.startsWith("image/")) handleFile(file);
-  }, []);
+  /* ── 공장 이미지 업로드 ── */
+  async function handleShipFile(file: File) {
+    setShipError(null); setShipUploading(true);
+    setShipPreview(URL.createObjectURL(file));
+    try {
+      const fd = new FormData(); fd.append("image", file);
+      const res = await fetch("/api/ocr-factory", { method: "POST", body: fd });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error);
+      setShipment(json.data);
+    } catch (e) { setShipError(e instanceof Error ? e.message : "오류"); setShipPreview(null); }
+    finally { setShipUploading(false); }
+  }
 
   /* ── 마킹 필드 업데이트 ── */
   function updateMarking(idx: number, field: keyof MarkingEntry, val: string) {
-    setMarkings(prev => prev.map((m, i) => {
-      if (i !== idx) return m;
-      const updated = { ...m, [field]: field === "partUnitPrice" ? (parseFloat(val) || undefined) : val };
-      if (field === "partUnitPrice") {
-        const price = parseFloat(val) || 0;
-        updated.partUnitPrice = price || undefined;
-        updated.partAmount = price ? price * m.quantity : undefined;
-      }
-      return updated;
-    }));
+    setMarkings(prev => prev.map((m, i) => i !== idx ? m : { ...m, [field]: val }));
   }
 
-  /* ── 문서 다운로드 ── */
-  async function download(docType: string, filename: string) {
+  /* ── A 다운로드 ── */
+  async function downloadA(type: "china-order" | "marking" | "receipt") {
     if (!quote) return;
-    setDownloading(docType);
-    setError(null);
+    setDlA(type); setGlobalError(null);
     try {
-      const res = await fetch("/api/generate-docs", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ docType, quote, markings }),
+      let res: Response;
+      if (type === "china-order") {
+        res = await fetch("/api/generate-china-order", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ quote, markings }),
+        });
+        if (!res.ok) { const j = await res.json(); throw new Error(j.error); }
+        const html = await res.text();
+        const win = window.open("", "_blank");
+        if (win) { win.document.write(html); win.document.close(); }
+        return;
+      }
+      if (type === "marking") {
+        res = await fetch("/api/generate-marking", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ quote, markings }),
+        });
+      } else {
+        res = await fetch("/api/generate-docs", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ docType: "receipt", quote, markings }),
+        });
+      }
+      if (!res.ok) { const j = await res.json(); throw new Error(j.error); }
+      const blob = await res.blob();
+      const disp = res.headers.get("Content-Disposition") || "";
+      const match = disp.match(/filename\*=UTF-8''(.+)/);
+      const fname = match ? decodeURIComponent(match[1]) : `${type}.xlsx`;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a"); a.href = url; a.download = fname; a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) { setGlobalError(e instanceof Error ? e.message : "다운로드 오류"); }
+    finally { setDlA(null); }
+  }
+
+  /* ── B 다운로드 ── */
+  async function downloadPacking() {
+    if (!shipment) return;
+    setDlB("packing"); setGlobalError(null);
+    try {
+      const res = await fetch("/api/generate-packing", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ shipment }),
       });
       if (!res.ok) { const j = await res.json(); throw new Error(j.error); }
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
-      a.href = url; a.download = filename; a.click();
+      a.href = url; a.download = `PackingList_${shipment.shipDate}.xlsx`; a.click();
       URL.revokeObjectURL(url);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "다운로드 오류");
-    } finally {
-      setDownloading(null);
-    }
+    } catch (e) { setGlobalError(e instanceof Error ? e.message : "다운로드 오류"); }
+    finally { setDlB(null); }
+  }
+
+  /* ── 단가 업데이트 (출고) ── */
+  function updateShipmentPrice(idx: number, val: string) {
+    if (!shipment) return;
+    const items = shipment.items.map((item, i) =>
+      i !== idx ? item : { ...item, unitPriceKrw: parseFloat(val) || undefined }
+    );
+    setShipment({ ...shipment, items });
   }
 
   return (
     <div className="min-h-screen bg-[#fafafa]">
       {/* nav */}
       <nav className="sticky top-0 z-50 border-b border-gray-100 bg-white/80 backdrop-blur-xl">
-        <div className="max-w-3xl mx-auto px-6 h-14 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
+        <div className="max-w-3xl mx-auto px-6 h-14 flex items-center gap-4">
+          <div className="flex items-center gap-2">
             <div className="w-6 h-6 rounded-md bg-zinc-900 flex items-center justify-center">
               <span className="text-white text-[9px] font-bold">C&C</span>
             </div>
             <span className="text-[14px] font-semibold tracking-tight">씨앤씨무역</span>
-            <span className="text-[12px] text-gray-400">물류 자동화</span>
           </div>
-          {quote && (
-            <button
-              onClick={() => { setQuote(null); setMarkings([]); setPreview(null); if (inputRef.current) inputRef.current.value = ""; }}
-              className="text-[12px] text-gray-400 hover:text-gray-600 transition-colors"
-            >
-              처음부터 다시
-            </button>
-          )}
+          <div className="flex items-center gap-1 ml-4 bg-gray-100 rounded-lg p-0.5">
+            {([["order", "수주 처리"], ["shipment", "출고 처리"]] as const).map(([key, label]) => (
+              <button key={key} onClick={() => setTab(key)}
+                className={`h-7 px-4 rounded-md text-[12px] font-medium transition-all ${tab === key ? "bg-white text-gray-900 shadow-sm" : "text-gray-400 hover:text-gray-600"}`}>
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
       </nav>
 
-      <main className="max-w-3xl mx-auto px-6 py-10 space-y-4">
+      <main className="max-w-3xl mx-auto px-6 py-8">
         {/* global error */}
-        {error && (
-          <div className="flex items-center gap-3 px-4 py-3 bg-red-50 border border-red-100 rounded-xl text-[13px] text-red-700">
-            <span>⚠</span>
-            <span className="flex-1">{error}</span>
-            <button onClick={() => setError(null)} className="text-red-300 hover:text-red-500">×</button>
+        {globalError && (
+          <div className="mb-6 flex items-center gap-3 px-4 py-3 bg-red-50 border border-red-100 rounded-xl text-[12px] text-red-600">
+            <span>⚠</span><span className="flex-1">{globalError}</span>
+            <button onClick={() => setGlobalError(null)} className="text-red-300 hover:text-red-500 text-lg">×</button>
           </div>
         )}
 
-        {/* ── STEP 1: 견적서 업로드 ── */}
-        <Section step={1} title="고객 발주 견적서 업로드" subtitle="이미지를 업로드하면 AI가 자동으로 정보를 추출합니다" active={true} done={!!quote}>
-          {!quote ? (
-            <label
-              onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
-              onDragLeave={() => setDragging(false)}
-              onDrop={handleDrop}
-              className={`flex flex-col items-center justify-center gap-3 h-44 rounded-xl border-[1.5px] border-dashed cursor-pointer transition-all
-                ${dragging ? "border-gray-400 bg-gray-50 scale-[1.01]" : "border-gray-200 bg-gray-50/50 hover:border-gray-300 hover:bg-gray-50"}
-              `}
-            >
-              <input ref={inputRef} type="file" accept="image/*" className="sr-only"
-                onChange={(e) => { if (e.target.files?.[0]) handleFile(e.target.files[0]); }} />
-              {uploading ? (
-                <div className="flex flex-col items-center gap-3">
-                  {preview && <img src={preview} className="h-20 object-contain opacity-30 rounded-lg" alt="" />}
-                  <div className="flex items-center gap-2 text-[13px] text-gray-500">
-                    <Spinner size={16} /> AI가 견적서 정보를 추출 중...
+        {/* ═══════════════ 워크플로우 A: 수주 처리 ═══════════════ */}
+        {tab === "order" && (
+          <div className="space-y-4">
+            {/* A-1: 견적서 업로드 */}
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-[0_1px_4px_rgba(0,0,0,0.05)] p-5">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <span className="text-[10px] font-bold text-blue-500 bg-blue-50 rounded-md px-2 py-0.5">STEP 1</span>
+                    <h2 className="text-[14px] font-semibold text-gray-900">고객 발주 견적서 업로드</h2>
                   </div>
+                  <p className="text-[11px] text-gray-400 ml-12">AI가 제품명 · 후가공 · 납기 · 단가를 자동 추출합니다</p>
                 </div>
+                {quote && (
+                  <button onClick={() => { setQuote(null); setMarkings([]); setQuotePreview(null); }}
+                    className="text-[11px] text-gray-400 hover:text-gray-600">재업로드</button>
+                )}
+              </div>
+
+              {!quote ? (
+                <UploadZone hint="고객사 발주 견적서 이미지 (PNG · JPG)" preview={quotePreview}
+                  uploading={quoteUploading} error={quoteError} onFile={handleQuoteFile} />
               ) : (
-                <>
-                  <div className="w-9 h-9 rounded-xl bg-white border border-gray-200 shadow-sm flex items-center justify-center text-gray-400">
-                    <IconUpload />
-                  </div>
-                  <div className="text-center">
-                    <p className="text-[13px] font-medium text-gray-700">클릭하거나 드래그하여 업로드</p>
-                    <p className="text-[11px] text-gray-400 mt-0.5">고객사 발주 견적서 이미지 (PNG · JPG)</p>
-                  </div>
-                  {uploadError && <p className="text-[11px] text-red-500">{uploadError}</p>}
-                </>
-              )}
-            </label>
-          ) : (
-            <div className="space-y-3">
-              {/* 추출 결과 요약 */}
-              <div className="grid grid-cols-3 gap-3">
-                {[
-                  { label: "견적번호", value: quote.quoteNo },
-                  { label: "고객사", value: quote.customer },
-                  { label: "납기", value: quote.deliveryDate || "-" },
-                ].map(({ label, value }) => (
-                  <div key={label} className="bg-gray-50 rounded-xl p-3">
-                    <p className="text-[10px] text-gray-400 mb-1">{label}</p>
-                    <p className="text-[13px] font-semibold text-gray-900 truncate">{value}</p>
-                  </div>
-                ))}
-              </div>
-              {/* 품목 테이블 */}
-              <div className="rounded-xl border border-gray-100 overflow-hidden">
-                <table className="w-full text-[12px]">
-                  <thead className="bg-gray-50 border-b border-gray-100">
-                    <tr>
-                      {["No", "제품명", "후가공", "수량", "단가", "금액", "납기"].map(h => (
-                        <th key={h} className="px-3 py-2.5 text-left font-medium text-gray-500">{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {quote.items.map((item, i) => (
-                      <tr key={i} className="border-b border-gray-50 last:border-0">
-                        <td className="px-3 py-2.5 text-gray-400">{item.no}</td>
-                        <td className="px-3 py-2.5 font-medium text-gray-800">{item.productName}</td>
-                        <td className="px-3 py-2.5 text-gray-600">{item.postProcess || "-"}</td>
-                        <td className="px-3 py-2.5 text-gray-800">{item.quantity.toLocaleString()} {item.unit}</td>
-                        <td className="px-3 py-2.5 text-gray-800">{item.unitPrice.toLocaleString()}</td>
-                        <td className="px-3 py-2.5 text-gray-800">{item.amount.toLocaleString()}</td>
-                        <td className="px-3 py-2.5 text-gray-500">{item.deliveryDate || quote.deliveryDate || "-"}</td>
-                      </tr>
+                <div className="space-y-3 animate-fadeUp">
+                  <div className="grid grid-cols-3 gap-2">
+                    {[{ l: "견적번호", v: quote.quoteNo }, { l: "고객사", v: quote.customer }, { l: "납기", v: quote.deliveryDate || "-" }].map(({ l, v }) => (
+                      <div key={l} className="bg-gray-50 rounded-xl p-3">
+                        <p className="text-[10px] text-gray-400 mb-0.5">{l}</p>
+                        <p className="text-[12px] font-semibold text-gray-900 truncate">{v}</p>
+                      </div>
                     ))}
-                  </tbody>
-                </table>
-              </div>
-              <p className="text-[11px] text-gray-400">합계: {quote.currency} {quote.totalAmount.toLocaleString()}</p>
+                  </div>
+                  <div className="rounded-xl border border-gray-100 overflow-hidden">
+                    <table className="w-full text-[11px]">
+                      <thead className="bg-gray-50">
+                        <tr>{["No", "제품명", "후가공", "수량", "단가", "납기"].map(h => (
+                          <th key={h} className="px-3 py-2 text-left font-medium text-gray-400">{h}</th>
+                        ))}</tr>
+                      </thead>
+                      <tbody>
+                        {quote.items.map((item, i) => (
+                          <tr key={i} className="border-t border-gray-50">
+                            <td className="px-3 py-2 text-gray-400">{item.no}</td>
+                            <td className="px-3 py-2 font-medium text-gray-800">{item.productName}</td>
+                            <td className="px-3 py-2 text-gray-500">{item.postProcess || "-"}</td>
+                            <td className="px-3 py-2 text-gray-700">{item.quantity.toLocaleString()} {item.unit}</td>
+                            <td className="px-3 py-2 text-gray-700">{item.unitPrice.toLocaleString()}</td>
+                            <td className="px-3 py-2 text-gray-500">{item.deliveryDate || quote.deliveryDate || "-"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
             </div>
-          )}
-        </Section>
 
-        {/* ── STEP 2: 마킹 제품명 입력 ── */}
-        <Section
-          step={2}
-          title="마킹 제품명 입력"
-          subtitle="중국발주서에 표기될 마킹용 제품명을 품목별로 입력해주세요"
-          active={!!quote}
-          done={hasMarkingNames}
-        >
-          <div className="space-y-3">
-            {markings.map((m, i) => (
-              <div key={i} className="rounded-xl border border-gray-100 bg-gray-50/50 p-4">
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">품목 {m.itemNo}</span>
-                  <span className="text-[12px] text-gray-700 font-medium">{m.productName}</span>
-                  <span className="ml-auto text-[11px] text-gray-400">{m.quantity.toLocaleString()} {m.unit}</span>
+            {/* A-2: 마킹 제품명 입력 */}
+            {quote && (
+              <div className="bg-white rounded-2xl border border-gray-100 shadow-[0_1px_4px_rgba(0,0,0,0.05)] p-5 animate-fadeUp">
+                <div className="flex items-center gap-2 mb-4">
+                  <span className="text-[10px] font-bold text-orange-500 bg-orange-50 rounded-md px-2 py-0.5">STEP 2</span>
+                  <h2 className="text-[14px] font-semibold text-gray-900">마킹 제품명 입력</h2>
+                  <p className="text-[11px] text-gray-400">발주서에 표기될 마킹명을 품목별로 입력</p>
                 </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <Field
-                    label="마킹 제품명 *"
-                    value={m.markingName}
-                    onChange={(v) => updateMarking(i, "markingName", v)}
-                    placeholder="마킹에 표기할 제품명"
-                  />
-                  <Field
-                    label="납기"
-                    value={m.deliveryDate}
-                    onChange={(v) => updateMarking(i, "deliveryDate", v)}
-                    placeholder="YYYY-MM-DD"
-                  />
-                </div>
-              </div>
-            ))}
-
-            {/* 중국발주서 다운로드 */}
-            {hasMarkingNames && (
-              <div className="pt-2 flex items-center justify-between">
-                <p className="text-[12px] text-gray-500">마킹 입력 완료 — 중국발주서를 출력할 수 있습니다</p>
-                <DownloadBtn
-                  label="중국발주서 (Excel)"
-                  loading={downloading === "china-order"}
-                  disabled={!hasMarkingNames || !!downloading}
-                  onClick={() => download("china-order", `중국발주서_${quote?.quoteNo}.xlsx`)}
-                />
-              </div>
-            )}
-          </div>
-        </Section>
-
-        {/* ── STEP 3: 패킹리스트 — 부품 단가 입력 ── */}
-        <Section
-          step={3}
-          title="마킹별 부품 단가 입력"
-          subtitle="패킹리스트에 표기될 부품별 단가를 입력해주세요"
-          active={hasMarkingNames}
-          done={hasMarkingNames && hasPartPrices}
-        >
-          <div className="space-y-3">
-            {markings.map((m, i) => (
-              <div key={i} className="flex items-center gap-4 rounded-xl border border-gray-100 bg-gray-50/50 px-4 py-3">
-                <div className="flex-1 min-w-0">
-                  <p className="text-[13px] font-medium text-gray-800 truncate">{m.markingName || m.productName}</p>
-                  <p className="text-[11px] text-gray-400 mt-0.5">{m.quantity.toLocaleString()} {m.unit}</p>
-                </div>
-                <div className="w-36">
-                  <Field
-                    label="부품 단가"
-                    value={m.partUnitPrice ?? ""}
-                    onChange={(v) => updateMarking(i, "partUnitPrice", v)}
-                    placeholder="0"
-                    type="number"
-                  />
-                </div>
-                <div className="w-32 text-right">
-                  <p className="text-[10px] text-gray-400 mb-1">금액</p>
-                  <p className="text-[13px] font-semibold text-gray-800">
-                    {m.partAmount ? m.partAmount.toLocaleString() : "-"}
-                  </p>
-                </div>
-              </div>
-            ))}
-
-            {hasPartPrices && (
-              <div className="pt-2 flex items-center justify-end">
-                <DownloadBtn
-                  label="패킹리스트 (Excel)"
-                  loading={downloading === "packing"}
-                  disabled={!!downloading}
-                  onClick={() => download("packing", `패킹리스트_${quote?.quoteNo}.xlsx`)}
-                />
-              </div>
-            )}
-          </div>
-        </Section>
-
-        {/* ── STEP 4: 입고명세서 ── */}
-        <Section
-          step={4}
-          title="입고명세서 출력"
-          subtitle="발주서 마킹별 수량 기준으로 입고명세서를 생성합니다"
-          active={hasMarkingNames}
-          done={false}
-        >
-          <div className="rounded-xl border border-gray-100 overflow-hidden mb-4">
-            <table className="w-full text-[12px]">
-              <thead className="bg-gray-50 border-b border-gray-100">
-                <tr>
-                  {["마킹 제품명", "후가공", "수량", "단가", "금액", "납기"].map(h => (
-                    <th key={h} className="px-3 py-2.5 text-left font-medium text-gray-500">{h}</th>
+                <div className="space-y-2">
+                  {markings.map((m, i) => (
+                    <div key={i} className="grid grid-cols-[1fr_1.2fr_1fr_1fr] gap-3 items-end p-3 rounded-xl bg-gray-50/60 border border-gray-100">
+                      <div>
+                        <p className="text-[10px] text-gray-400 mb-1">원 제품명</p>
+                        <p className="text-[12px] font-medium text-gray-700 truncate">{m.productName}</p>
+                        <p className="text-[10px] text-gray-400 mt-0.5">{m.quantity.toLocaleString()} {m.unit}</p>
+                      </div>
+                      <Field label="마킹 제품명 *" value={m.markingName}
+                        onChange={v => updateMarking(i, "markingName", v)} placeholder="공장 전달용 제품명" small />
+                      <Field label="후가공" value={m.postProcess}
+                        onChange={v => updateMarking(i, "postProcess", v)} placeholder="도금/도장/인쇄 등" small />
+                      <Field label="납기" value={m.deliveryDate}
+                        onChange={v => updateMarking(i, "deliveryDate", v)} placeholder="YYYY-MM-DD" small />
+                    </div>
                   ))}
-                </tr>
-              </thead>
-              <tbody>
-                {markings.map((m, i) => (
-                  <tr key={i} className="border-b border-gray-50 last:border-0">
-                    <td className="px-3 py-2.5 font-medium text-gray-800">{m.markingName || m.productName}</td>
-                    <td className="px-3 py-2.5 text-gray-600">{m.postProcess || "-"}</td>
-                    <td className="px-3 py-2.5 text-gray-800">{m.quantity.toLocaleString()} {m.unit}</td>
-                    <td className="px-3 py-2.5 text-gray-800">{m.unitPrice.toLocaleString()}</td>
-                    <td className="px-3 py-2.5 text-gray-800">{m.amount.toLocaleString()}</td>
-                    <td className="px-3 py-2.5 text-gray-500">{m.deliveryDate || "-"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                </div>
+              </div>
+            )}
+
+            {/* A-3: 문서 출력 */}
+            {hasMarkingNames && (
+              <div className="bg-white rounded-2xl border border-gray-100 shadow-[0_1px_4px_rgba(0,0,0,0.05)] p-5 animate-fadeUp">
+                <div className="flex items-center gap-2 mb-5">
+                  <span className="text-[10px] font-bold text-green-600 bg-green-50 rounded-md px-2 py-0.5">STEP 3</span>
+                  <h2 className="text-[14px] font-semibold text-gray-900">문서 출력</h2>
+                </div>
+                <div className="grid grid-cols-1 gap-3">
+                  {/* 중국발주서 */}
+                  <div className="flex items-center justify-between p-4 rounded-xl bg-zinc-50 border border-zinc-100">
+                    <div>
+                      <p className="text-[13px] font-semibold text-gray-900">중국발주서</p>
+                      <p className="text-[11px] text-gray-400 mt-0.5">C&C 订货单 · 중국어 A4 양식 · 새 탭에서 인쇄 가능</p>
+                    </div>
+                    <DlBtn label="발주서 열기" ext="HTML" loading={dlA === "china-order"} disabled={!!dlA}
+                      onClick={() => downloadA("china-order")} />
+                  </div>
+                  {/* 마킹 */}
+                  <div className="flex items-center justify-between p-4 rounded-xl bg-zinc-50 border border-zinc-100">
+                    <div>
+                      <p className="text-[13px] font-semibold text-gray-900">마킹</p>
+                      <p className="text-[11px] text-gray-400 mt-0.5">
+                        품목별 시트 {markings.length}장 · C&C / ITEM / Q`TY / C/NO / 고객사 / MADE IN CHINA
+                      </p>
+                    </div>
+                    <DlBtn label="마킹 다운로드" ext="Excel" loading={dlA === "marking"} disabled={!!dlA}
+                      onClick={() => downloadA("marking")} />
+                  </div>
+                  {/* 입고명세서 */}
+                  <div className="flex items-center justify-between p-4 rounded-xl bg-zinc-50 border border-zinc-100">
+                    <div>
+                      <p className="text-[13px] font-semibold text-gray-900">입고명세서</p>
+                      <p className="text-[11px] text-gray-400 mt-0.5">마킹별 수량 기준 · 국내 고객사 전달용</p>
+                    </div>
+                    <DlBtn label="입고명세서" ext="Excel" loading={dlA === "receipt"} disabled={!!dlA}
+                      onClick={() => downloadA("receipt")} />
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
-          <div className="flex justify-end">
-            <DownloadBtn
-              label="입고명세서 (Excel)"
-              loading={downloading === "receipt"}
-              disabled={!hasMarkingNames || !!downloading}
-              onClick={() => download("receipt", `입고명세서_${quote?.quoteNo}.xlsx`)}
-            />
+        )}
+
+        {/* ═══════════════ 워크플로우 B: 출고 처리 ═══════════════ */}
+        {tab === "shipment" && (
+          <div className="space-y-4">
+            {/* B-1: 공장 이미지 업로드 */}
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-[0_1px_4px_rgba(0,0,0,0.05)] p-5">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <span className="text-[10px] font-bold text-blue-500 bg-blue-50 rounded-md px-2 py-0.5">STEP 1</span>
+                    <h2 className="text-[14px] font-semibold text-gray-900">공장 출고 이미지 업로드</h2>
+                  </div>
+                  <p className="text-[11px] text-gray-400 ml-12">중국어 이미지 → 영문 패킹 정보 자동 추출</p>
+                </div>
+                {shipment && (
+                  <button onClick={() => { setShipment(null); setShipPreview(null); }}
+                    className="text-[11px] text-gray-400 hover:text-gray-600">재업로드</button>
+                )}
+              </div>
+
+              {!shipment ? (
+                <UploadZone hint="중국 공장 출고 이미지 (PNG · JPG)" preview={shipPreview}
+                  uploading={shipUploading} error={shipError} onFile={handleShipFile} />
+              ) : (
+                <div className="space-y-3 animate-fadeUp">
+                  <div className="grid grid-cols-2 gap-2">
+                    {[{ l: "출고일", v: shipment.shipDate }, { l: "공장", v: shipment.factory || "-" }].map(({ l, v }) => (
+                      <div key={l} className="bg-gray-50 rounded-xl p-3">
+                        <p className="text-[10px] text-gray-400 mb-0.5">{l}</p>
+                        <p className="text-[12px] font-semibold text-gray-900">{v}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="rounded-xl border border-gray-100 overflow-hidden">
+                    <table className="w-full text-[11px]">
+                      <thead className="bg-gray-50">
+                        <tr>{["Item", "Material", "Packing", "Qty", "CTNS"].map(h => (
+                          <th key={h} className="px-3 py-2 text-left font-medium text-gray-400">{h}</th>
+                        ))}</tr>
+                      </thead>
+                      <tbody>
+                        {shipment.items.map((item, i) => (
+                          <tr key={i} className="border-t border-gray-50">
+                            <td className="px-3 py-2 font-medium text-gray-800">{item.itemNameEn}</td>
+                            <td className="px-3 py-2 text-gray-500">{item.material}</td>
+                            <td className="px-3 py-2 text-gray-600 font-mono text-[10px]">{item.packingBreakdown}</td>
+                            <td className="px-3 py-2 text-gray-700">{item.quantity.toLocaleString()}</td>
+                            <td className="px-3 py-2 text-gray-700">{item.cartons}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* B-2: 단가 입력 */}
+            {shipment && (
+              <div className="bg-white rounded-2xl border border-gray-100 shadow-[0_1px_4px_rgba(0,0,0,0.05)] p-5 animate-fadeUp">
+                <div className="flex items-center gap-2 mb-4">
+                  <span className="text-[10px] font-bold text-orange-500 bg-orange-50 rounded-md px-2 py-0.5">STEP 2</span>
+                  <h2 className="text-[14px] font-semibold text-gray-900">단가 입력</h2>
+                  <p className="text-[11px] text-gray-400">입력값 ÷ 7 = USD 단가 (미입력 시 USD 0.100)</p>
+                </div>
+                <div className="space-y-2">
+                  {shipment.items.map((item, i) => {
+                    const usd = item.unitPriceKrw ? (item.unitPriceKrw / 7).toFixed(3) : "0.100";
+                    return (
+                      <div key={i} className="flex items-center gap-4 p-3 rounded-xl bg-gray-50/60 border border-gray-100">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[12px] font-medium text-gray-800">{item.itemNameEn} <span className="text-gray-400 font-normal">({item.material})</span></p>
+                          <p className="text-[10px] text-gray-400">{item.packingBreakdown} · {item.quantity.toLocaleString()} pcs</p>
+                        </div>
+                        <div className="w-28">
+                          <Field label="단가 (￥ 입력)" value={item.unitPriceKrw ?? ""}
+                            onChange={v => updateShipmentPrice(i, v)} placeholder="예: 3.5" type="number" small />
+                        </div>
+                        <div className="text-right w-24">
+                          <p className="text-[10px] text-gray-400 mb-0.5">USD 단가</p>
+                          <p className="text-[13px] font-semibold text-gray-900">{usd}</p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* B-3: 패킹리스트 출력 */}
+            {shipment && (
+              <div className="bg-white rounded-2xl border border-gray-100 shadow-[0_1px_4px_rgba(0,0,0,0.05)] p-5 animate-fadeUp">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <span className="text-[10px] font-bold text-green-600 bg-green-50 rounded-md px-2 py-0.5">STEP 3</span>
+                      <h2 className="text-[14px] font-semibold text-gray-900">패킹리스트 출력</h2>
+                    </div>
+                    <p className="text-[11px] text-gray-400 ml-12">C&C Trading Co., Ltd. · KR5090 · 영문 포워딩 양식</p>
+                  </div>
+                  <DlBtn label="패킹리스트" ext="Excel" loading={dlB === "packing"} disabled={!!dlB}
+                    onClick={downloadPacking} />
+                </div>
+              </div>
+            )}
           </div>
-        </Section>
+        )}
       </main>
 
-      <footer className="border-t border-gray-100 mt-8">
+      <footer className="border-t border-gray-100 mt-10">
         <div className="max-w-3xl mx-auto px-6 py-5 flex justify-between">
           <span className="text-[11px] text-gray-400">씨앤씨무역 물류 자동화 시스템</span>
           <span className="text-[11px] text-gray-300">Powered by GPT-4o Vision</span>
