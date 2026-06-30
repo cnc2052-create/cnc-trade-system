@@ -115,7 +115,7 @@ function ProductCardModal({ onClose }: { onClose: ()=>void }) {
   return (
     <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", zIndex:100, display:"flex", alignItems:"center", justifyContent:"center" }}
       onClick={e=>{ if(e.target===e.currentTarget) onClose(); }}>
-      <div style={{ background:"#fff", borderRadius:20, width:680, maxHeight:"90vh", overflow:"auto", padding:32, boxShadow:"0 20px 60px rgba(0,0,0,0.15)" }}>
+      <div style={{ background:"#fff", borderRadius:20, width:"min(680px,96vw)", maxHeight:"90vh", overflow:"auto", padding:32, boxShadow:"0 20px 60px rgba(0,0,0,0.15)" }}>
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:24 }}>
           <h2 style={{ fontSize:18, fontWeight:800, color:"#0F172A" }}>📋 제품정보 카드</h2>
           <button onClick={onClose} style={{ width:32, height:32, borderRadius:8, border:"1px solid #E2E8F0", background:"#F8FAFC", cursor:"pointer", fontSize:18, color:"#64748B" }}>×</button>
@@ -237,6 +237,14 @@ export default function Dashboard() {
   const [showCardModal, setShowCardModal] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; customer: string; product: string } | null>(null);
   const [showShipped, setShowShipped] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth <= 768);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
 
   const load = useCallback(() => {
     fetch("/api/orders")
@@ -300,9 +308,13 @@ export default function Dashboard() {
 
   return (
     <div style={{ display:"flex", minHeight:"100vh", background:"#F1F5F9", fontFamily:"'Apple SD Gothic Neo','Noto Sans KR','Segoe UI',system-ui,sans-serif", color:"#1E293B" }}>
+      {/* 모바일 오버레이 */}
+      {isMobile && sidebarOpen && (
+        <div onClick={()=>setSidebarOpen(false)} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", zIndex:199 }}/>
+      )}
 
       {/* ── 사이드바 ── */}
-      <aside style={{ width:220, flexShrink:0, background:"#fff", borderRight:"1px solid #E2E8F0", display:"flex", flexDirection:"column", position:"sticky", top:0, height:"100vh", boxShadow:"2px 0 8px rgba(0,0,0,0.04)" }}>
+      <aside style={{ width:220, flexShrink:0, background:"#fff", borderRight:"1px solid #E2E8F0", display:"flex", flexDirection:"column", position: isMobile?"fixed":"sticky", left: isMobile?(sidebarOpen?"0":"-240px"):undefined, top:0, height:"100vh", boxShadow:"2px 0 8px rgba(0,0,0,0.04)", zIndex: isMobile?200:undefined, transition:"left 0.25s ease" }}>
 
         {/* 로고 */}
         <div style={{ padding:"22px 20px 18px", borderBottom:"1px solid #F1F5F9" }}>
@@ -379,7 +391,10 @@ export default function Dashboard() {
       <main style={{ flex:1, overflow:"auto" }}>
 
         {/* 헤더 */}
-        <header style={{ background:"#fff", borderBottom:"1px solid #E2E8F0", padding:"0 32px", height:60, display:"flex", alignItems:"center", justifyContent:"space-between", position:"sticky", top:0, zIndex:10, boxShadow:"0 1px 4px rgba(0,0,0,0.06)" }}>
+        <header style={{ background:"#fff", borderBottom:"1px solid #E2E8F0", padding: isMobile?"0 16px":"0 32px", height:60, display:"flex", alignItems:"center", justifyContent:"space-between", position:"sticky", top:0, zIndex:10, boxShadow:"0 1px 4px rgba(0,0,0,0.06)" }}>
+          {isMobile && (
+            <button onClick={()=>setSidebarOpen(v=>!v)} style={{ marginRight:12, background:"none", border:"none", cursor:"pointer", fontSize:22, color:"#475569", padding:4 }}>☰</button>
+          )}
           <div>
             <h1 style={{ fontSize:17, fontWeight:700, color:"#0F172A" }}>
               {filter==="all" ? "전체 주문 현황" : (STATUS_MAP[filter]?.label||"주문 현황")}
@@ -392,10 +407,10 @@ export default function Dashboard() {
           </button>
         </header>
 
-        <div style={{ padding:"24px 28px", display:"flex", flexDirection:"column", gap:22 }}>
+        <div style={{ padding: isMobile?"14px 12px":"24px 28px", display:"flex", flexDirection:"column", gap: isMobile?14:22 }}>
 
           {/* 바로가기 */}
-          <div style={{ display:"grid", gridTemplateColumns:"repeat(6,1fr)", gap:10 }}>
+          <div style={{ display:"grid", gridTemplateColumns: isMobile?"repeat(3,1fr)":"repeat(6,1fr)", gap:10 }}>
             {QUICK_LINKS.map(link=>(
               <a key={link.label} href={link.url} target="_blank" rel="noopener noreferrer"
                 style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:3, padding:"7px 8px", background:"#fff", border:"1px solid #E2E8F0", borderRadius:12, textDecoration:"none", boxShadow:"0 1px 4px rgba(0,0,0,0.05)", transition:"all 0.15s" }}
@@ -410,7 +425,7 @@ export default function Dashboard() {
 
           {/* 통계 카드 — 전체 보기일 때만 */}
           {filter==="all" && (
-            <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:14 }}>
+            <div style={{ display:"grid", gridTemplateColumns: isMobile?"repeat(2,1fr)":"repeat(4,1fr)", gap:14 }}>
               {stats.map(s=>(
                 <div key={s.label}
                   onClick={()=>{ if((s as {clickable?:boolean}).clickable) setFilter(filter==="deadline"?"all":"deadline"); }}
@@ -450,7 +465,7 @@ export default function Dashboard() {
             const maxProfit = Math.max(...mRows.map(r=>r[1].profit), 1);
             const BAR_H = 180;
             return (
-              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14 }}>
+              <div style={{ display:"grid", gridTemplateColumns: isMobile?"1fr":"1fr 1fr", gap:14 }}>
                 <div style={{ background:"#fff", borderRadius:16, border:"1px solid #E2E8F0", padding:"20px 24px", boxShadow:"0 1px 4px rgba(0,0,0,0.05)" }}>
                   <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:4 }}>
                     <p style={{ fontSize:17, fontWeight:600, color:"#475569" }}>월별 수주 현황</p>
@@ -534,7 +549,7 @@ export default function Dashboard() {
               </div>
               <span style={{ fontSize:11, color:"#94A3B8", background:"#F8FAFC", padding:"3px 12px", borderRadius:20, border:"1px solid #E2E8F0" }}>{filtered.length}건</span>
             </div>
-            <div style={{ overflowX:"auto" }}>
+            <div style={{ overflowX:"auto", WebkitOverflowScrolling:"touch" } as React.CSSProperties}>
               <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
                 <thead>
                   <tr style={{ background:"#F8FAFC" }}>
