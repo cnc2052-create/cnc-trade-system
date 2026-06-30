@@ -118,6 +118,13 @@ function Cell({ value, onChange, placeholder, type = "text" }: {
 export default function Page() {
   const router = useRouter();
   const [quote, setQuote] = useState<CustomerQuote | null>(null);
+  const [editItems, setEditItems] = useState<CustomerQuote["items"]>([]);
+
+  function updateItem(i: number, field: "productCode" | "productName" | "unitPrice" | "postProcess", val: string) {
+    setEditItems(prev => prev.map((it, idx) =>
+      idx !== i ? it : { ...it, [field]: field === "unitPrice" ? Number(val.replace(/,/g,""))||0 : val }
+    ));
+  }
   const [quotePreview, setQuotePreview] = useState<string | null>(null);
   const [quoteUploading, setQuoteUploading] = useState(false);
   const [quoteError, setQuoteError] = useState<string | null>(null);
@@ -142,14 +149,41 @@ export default function Page() {
     return d.toISOString().slice(0, 10);
   }
 
+  /* 번역 함수 (초기 로드 + 수동 재번역 공용) */
+  async function translateItems(items: typeof editItems) {
+    if (!quote) return;
+    setTranslating(true);
+    try {
+      const res = await fetch("/api/translate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          items: items.map(it => ({
+            productName: it.productName,
+            postProcess: it.postProcess || "",
+          })),
+        }),
+      });
+      const json = await res.json();
+      if (!json.success) return;
+      setChinaOrder(prev => ({
+        ...prev,
+        items: prev.items.map((it, i) => ({
+          ...it,
+          productNameCn: json.translated[i]?.productNameCn || "",
+          postProcessCn: json.translated[i]?.postProcessCn || "",
+        })),
+      }));
+    } catch {} finally { setTranslating(false); }
+  }
+
   /* 견적서 로드 시 중국발주서 초기값 + 자동 번역 */
   useEffect(() => {
     if (!quote) return;
-    // 우선 빈 값으로 초기화 (출고일 = 납기 - 10일)
     setChinaOrder({
       factory: "",
       notes: "",
-      items: quote.items.map(item => {
+      items: editItems.map(item => {
         const baseDt = item.deliveryDate || quote.deliveryDate || "";
         return {
           productNameCn: "",
@@ -161,32 +195,7 @@ export default function Page() {
         };
       }),
     });
-    // AI 번역 호출
-    setTranslating(true);
-    fetch("/api/translate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        items: quote.items.map(it => ({
-          productName: it.productName,
-          postProcess: it.postProcess || "",
-        })),
-      }),
-    })
-      .then(r => r.json())
-      .then(json => {
-        if (!json.success) return;
-        setChinaOrder(prev => ({
-          ...prev,
-          items: prev.items.map((it, i) => ({
-            ...it,
-            productNameCn: json.translated[i]?.productNameCn || "",
-            postProcessCn: json.translated[i]?.postProcessCn || "",
-          })),
-        }));
-      })
-      .catch(() => {}) // 번역 실패 시 무시 (사용자가 직접 입력)
-      .finally(() => setTranslating(false));
+    translateItems(editItems);
   }, [quote]);
 
   /* 중국발주서 행 수정 */
@@ -216,7 +225,10 @@ export default function Page() {
       const res = await fetch("/api/ocr-quote", { method: "POST", body: fd });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error);
-      setQuote(json.data as CustomerQuote);
+      const q = json.data as CustomerQuote;
+      setQuote(q);
+      if (q.totalAmount) setKrwPrice(Math.round(q.totalAmount).toLocaleString());
+      setEditItems(q.items);
       setMarkings([]);
       setPackingPrices({});
     } catch (e) { setQuoteError(e instanceof Error ? e.message : "오류"); setQuotePreview(null); }
@@ -268,7 +280,7 @@ export default function Page() {
 
   async function saveOrder() {
     if (!quote) return;
-    const firstItem = quote.items[0];
+    const firstItem = editItems[0] || quote.items[0];
     const payload = {
       order_no: quote.quoteNo,
       customer: quote.customer,
@@ -328,10 +340,14 @@ export default function Page() {
             {/* 수주가 입력 */}
             {quote && (
               <div className="flex items-center gap-2">
-                <span className="text-[12px] text-gray-400">수주가(KRW)</span>
-                <input type="text" value={krwPrice} onChange={e => setKrwPrice(e.target.value)}
-                  placeholder="예: 5000000"
-                  className="h-9 w-32 px-3 rounded-lg border border-gray-200 text-[13px] text-gray-800 bg-white focus:outline-none focus:border-gray-400" />
+                <span className="text-[12px] text-gray-400">공급가액(KRW)</span>
+                <input type="text" value={krwPrice}
+                  onChange={e => {
+                    const raw = e.target.value.replace(/[^0-9]/g, "");
+                    setKrwPrice(raw ? Number(raw).toLocaleString() : "");
+                  }}
+                  placeholder="견적서 업로드시 자동입력"
+                  className="h-9 w-40 px-3 rounded-lg border border-gray-200 text-[13px] text-gray-800 bg-white focus:outline-none focus:border-gray-400" />
               </div>
             )}
             {hasMarkings && (
@@ -387,21 +403,49 @@ export default function Page() {
               <div className="rounded-xl border border-gray-100 overflow-hidden">
                 <table className="w-full text-[14px]">
                   <thead className="bg-gray-50">
-                    <tr>{["No","제품명","후가공","수량","단가","납기"].map(h => (
+                    <tr>{["No","품목코드","제품명","내용","수량","단가","납기"].map(h => (
                       <th key={h} className="px-4 py-3 text-left font-semibold text-gray-500">{h}</th>
                     ))}</tr>
                   </thead>
                   <tbody>
-                    {quote.items.map((item, i) => (
-                      <tr key={i} className="border-t border-gray-50">
-                        <td className="px-4 py-3 text-gray-400">{item.no}</td>
-                        <td className="px-4 py-3 font-semibold text-gray-800">{item.productName}</td>
-                        <td className="px-4 py-3 text-gray-600">{item.postProcess || "-"}</td>
-                        <td className="px-4 py-3 text-gray-700">{item.quantity.toLocaleString()} {item.unit}</td>
-                        <td className="px-4 py-3 text-gray-700">{item.unitPrice.toLocaleString()}</td>
-                        <td className="px-4 py-3 text-gray-500">{item.deliveryDate || quote.deliveryDate || "-"}</td>
+                    {editItems.map((item, i) => {
+                      const cellStyle: React.CSSProperties = { padding:"10px 8px", border:"1px solid #E2E8F0", borderRadius:7, fontSize:13, background:"#F8FAFC", outline:"none", width:"100%" };
+                      return (
+                      <tr key={i} className="border-t border-gray-50" style={{ verticalAlign:"middle" }}>
+                        <td className="px-4 text-gray-400 text-center" style={{ width:40 }}>{item.no}</td>
+                        <td className="px-2 py-2" style={{ width:110 }}>
+                          <input value={item.productCode ?? ""} onChange={e=>updateItem(i,"productCode",e.target.value)}
+                            placeholder="품목코드"
+                            style={{ ...cellStyle, color:"#64748B", fontSize:12 }}
+                            onFocus={e=>e.target.style.borderColor="#DC2626"}
+                            onBlur={e=>e.target.style.borderColor="#E2E8F0"}/>
+                        </td>
+                        <td className="px-2 py-2" style={{ width:130 }}>
+                          <input value={item.productName} onChange={e=>updateItem(i,"productName",e.target.value)}
+                            style={{ ...cellStyle, fontWeight:600, color:"#1E293B" }}
+                            onFocus={e=>e.target.style.borderColor="#DC2626"}
+                            onBlur={e=>{ e.target.style.borderColor="#E2E8F0"; translateItems(editItems); }}/>
+                        </td>
+                        <td className="px-2 py-2" style={{ minWidth:320 }}>
+                          <input value={item.postProcess ?? ""} onChange={e=>updateItem(i,"postProcess",e.target.value)}
+                            placeholder="내용 없음"
+                            style={{ ...cellStyle, color:"#475569", fontSize:14, padding:"10px 12px", background:"#fff" }}
+                            onFocus={e=>e.target.style.borderColor="#DC2626"}
+                            onBlur={e=>{ e.target.style.borderColor="#E2E8F0"; translateItems(editItems); }}/>
+                        </td>
+                        <td className="px-3 py-2 text-gray-700 whitespace-nowrap" style={{ width:100 }}>{item.quantity.toLocaleString()} {item.unit}</td>
+                        <td className="px-2 py-2" style={{ width:100 }}>
+                          <input value={item.unitPrice===0?"":item.unitPrice.toLocaleString()}
+                            onChange={e=>updateItem(i,"unitPrice",e.target.value)}
+                            placeholder="단가"
+                            style={{ ...cellStyle, textAlign:"right", color:"#1E293B" }}
+                            onFocus={e=>e.target.style.borderColor="#DC2626"}
+                            onBlur={e=>e.target.style.borderColor="#E2E8F0"}/>
+                        </td>
+                        <td className="px-3 py-2 text-gray-500 whitespace-nowrap" style={{ width:90 }}>{item.deliveryDate || quote.deliveryDate || "-"}</td>
                       </tr>
-                    ))}
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -436,10 +480,10 @@ export default function Page() {
               <table className="w-full text-[14px]">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-500 w-[28%]">产品名称 (중국어)</th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-500 w-[28%]">工艺 (후가공)</th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-500 w-[14%]">单价 (단가)</th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-500 w-[14%]">数量</th>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-500 w-[20%]">产品名称 (중국어)</th>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-500 w-[36%]">工艺 (후가공)</th>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-500 w-[12%]">单价 (단가)</th>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-500 w-[16%]">数量</th>
                     <th className="px-4 py-3 text-left font-semibold text-gray-500 w-[16%]">出货日期</th>
                   </tr>
                 </thead>
@@ -448,11 +492,14 @@ export default function Page() {
                     <tr key={i} className="border-t border-gray-50">
                       <td className="px-3 py-2">
                         <Cell value={it.productNameCn} onChange={v => updateCOItem(i, "productNameCn", v)}
-                          placeholder={quote.items[i]?.productName || "중국어 제품명"}/>
+                          placeholder={editItems[i]?.productName || "중국어 제품명"}/>
                       </td>
                       <td className="px-3 py-2">
-                        <Cell value={it.postProcessCn} onChange={v => updateCOItem(i, "postProcessCn", v)}
-                          placeholder="예: 丝印"/>
+                        <textarea value={it.postProcessCn} onChange={e => updateCOItem(i, "postProcessCn", e.target.value)}
+                          placeholder="예: 盖子-白色亮光 / 管-白色哑光"
+                          rows={2}
+                          className="w-full px-2 py-1.5 rounded-lg border border-gray-200 text-[14px] text-gray-900 bg-white focus:outline-none focus:border-gray-400 transition-colors placeholder:text-gray-300"
+                          style={{ resize:"vertical", lineHeight:1.5 }}/>
                       </td>
                       <td className="px-3 py-2">
                         <Cell value={it.unitPrice} onChange={v => updateCOItem(i, "unitPrice", v)}
@@ -519,7 +566,7 @@ export default function Page() {
               {/* 개별 버튼은 각 행에 표시 */}
             </div>
             <div className="space-y-3">
-              {quote.items.map((item) => {
+              {editItems.map((item) => {
                 const parts = markings.filter(m => m.itemNo === item.no);
                 return (
                   <div key={item.no} className="rounded-xl border border-gray-100 overflow-hidden">

@@ -1,6 +1,7 @@
 // 고객 견적서에서 추출된 품목
 export interface QuoteItem {
   no: number;
+  productCode?: string;   // 품목코드/제품번호
   productName: string;    // 제품명
   spec?: string;          // 규격
   postProcess?: string;   // 후가공

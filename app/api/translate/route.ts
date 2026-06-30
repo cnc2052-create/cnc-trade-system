@@ -26,7 +26,7 @@ JSON 배열만 반환하세요. 다른 설명 없이.
 ${JSON.stringify(items)}
 
 출력 형식 (배열 길이는 입력과 동일):
-[{"productNameCn":"...","postProcessCn":"..."}]`;
+[{"productNameCn":"...","postProcessCn":"...","productNameEn":"영문 제품명 (Cream Jar / Pump Bottle / Cap 등 물류 영문명)"}]`;
 
     const res = await getClient().chat.completions.create({
       model: "gpt-4o",

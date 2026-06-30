@@ -24,6 +24,8 @@ export interface Order {
   manager: string;
   freight: number;
   krw_price: number;
+  order_date: string | null;
+  receipt_data: object | null;
   created_at: string;
   updated_at: string;
 }

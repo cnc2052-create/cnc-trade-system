@@ -1,88 +1,109 @@
-import { CustomerQuote, MarkingEntry } from "@/types";
+export interface PlItem {
+  productNameEn: string;
+  productNameKo: string;
+  quantity: number;
+  unit: string;
+  boxCount: number;
+  unitPriceUsd?: number;
+  packingBreakdown?: string;
+  material?: string;
+}
 
 export function buildPackingListHTML(
-  quote: CustomerQuote,
-  markings: MarkingEntry[],
-  imageBase64?: string   // "data:image/...;base64,..."
+  customer: string,
+  customerCode: string,
+  items: PlItem[],
 ): string {
-  const today = new Date().toLocaleDateString("ko-KR", { year: "numeric", month: "long", day: "numeric" });
-  const fmt = (n: number) => n.toFixed(3);
+  const totalQty    = items.reduce((s, it) => s + it.quantity, 0);
+  const totalCartons = items.reduce((s, it) => s + (it.boxCount || 0), 0);
+  const totalUsd    = items.reduce((s, it) => s + (it.unitPriceUsd || 0) * it.quantity, 0);
 
-  const totalQty = markings.reduce((s, m) => s + m.quantity, 0);
-  const totalUsd = markings.reduce((s, m) => s + m.quantity * (m.unitPrice || 0.1), 0);
-
-  const rows = markings.map((m, i) => `
+  const rows = items.map(it => {
+    const amt = (it.unitPriceUsd || 0) * it.quantity;
+    return `
     <tr>
-      <td>${i + 1}</td>
-      <td>${m.markingName || m.productName}</td>
-      <td class="r">${m.quantity.toLocaleString()}</td>
-      <td class="r">${m.unit || "EA"}</td>
-      <td class="r">USD ${fmt(m.unitPrice || 0.1)}</td>
-      <td class="r">USD ${fmt(m.quantity * (m.unitPrice || 0.1))}</td>
-    </tr>`).join("");
+      <td>${it.productNameEn || it.productNameKo}</td>
+      <td>${it.material || "N/A"}</td>
+      <td>${it.packingBreakdown || (() => {
+        if (!it.boxCount || it.boxCount === 0) return "-";
+        const perBox = Math.floor(it.quantity / it.boxCount);
+        const rem = it.quantity - perBox * it.boxCount;
+        return rem > 0
+          ? `${perBox.toLocaleString()} × ${it.boxCount} + ${rem.toLocaleString()}`
+          : `${perBox.toLocaleString()} × ${it.boxCount}`;
+      })()}</td>
+      <td class="r">${it.quantity.toLocaleString()}</td>
+      <td class="r">${it.boxCount || "-"}</td>
+      <td class="r">${it.unitPriceUsd ? it.unitPriceUsd.toFixed(3) : "-"}</td>
+      <td class="r">${it.unitPriceUsd ? amt.toFixed(2) : "-"}</td>
+    </tr>`;
+  }).join("");
 
   return `<!DOCTYPE html>
-<html lang="ko"><head>
+<html lang="en"><head>
 <meta charset="UTF-8">
-<title>Packing List</title>
+<title>Packing Details</title>
 <style>
-*{margin:0;padding:0;box-sizing:border-box}
-body{font-family:"Malgun Gothic","Apple SD Gothic Neo",Arial,sans-serif;padding:48px 56px;max-width:860px;margin:0 auto;font-size:13px;color:#000}
-.no-print{position:fixed;top:16px;right:16px;display:flex;gap:8px}
-.no-print button{padding:8px 20px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;border:none}
-.btn-print{background:#111;color:#fff}
-.btn-close{background:#eee;color:#333}
-h1{font-size:26px;font-weight:700;margin-bottom:4px}
-.sub{font-size:13px;color:#444;margin-bottom:28px}
-table{width:100%;border-collapse:collapse}
-th{font-weight:700;padding:9px 10px;border-bottom:2px solid #333;text-align:left;font-size:13px}
-td{padding:9px 10px;border-bottom:1px solid #ddd;font-size:13px}
-.r{text-align:right}
-.total-row td{font-weight:700;border-top:2px solid #333;border-bottom:none;background:#f9f9f9}
-.pkg-img{margin-top:32px}
-.pkg-img h3{font-size:14px;font-weight:700;margin-bottom:12px;padding-bottom:6px;border-bottom:1px solid #ccc}
-.pkg-img img{max-width:100%;border-radius:6px;border:1px solid #ddd}
-@media print{.no-print{display:none}body{padding:16px 24px}@page{size:A4;margin:12mm}}
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:Arial,"Malgun Gothic","Apple SD Gothic Neo",sans-serif;padding:48px 56px;max-width:900px;margin:0 auto;font-size:13px;color:#111}
+  .no-print{position:fixed;top:16px;right:16px;display:flex;gap:8px;z-index:999}
+  .no-print button{padding:8px 20px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;border:none}
+  .btn-print{background:#111;color:#fff}
+  .btn-close{background:#eee;color:#333}
+  .header-info{margin-bottom:28px}
+  .header-info p{font-size:13px;color:#444;line-height:1.8}
+  .header-info .company{font-size:15px;font-weight:600;color:#111;margin-top:2px}
+  h1{font-size:22px;font-weight:700;margin-bottom:20px;border-bottom:2px solid #111;padding-bottom:8px}
+  table{width:100%;border-collapse:collapse;margin-bottom:32px}
+  thead tr{border-bottom:1.5px solid #111}
+  th{font-weight:700;padding:10px 8px;text-align:left;font-size:12px;color:#333}
+  td{padding:10px 8px;border-bottom:1px solid #e0e0e0;font-size:13px;color:#111}
+  .r{text-align:right}
+  .summary{margin-top:4px}
+  .summary h2{font-size:15px;font-weight:700;margin-bottom:10px}
+  .summary ul{list-style:disc;padding-left:20px;line-height:2}
+  .summary li{font-size:13px;color:#111}
+  .summary li strong{font-weight:700}
+  @media print{.no-print{display:none}body{padding:16px 24px}@page{size:A4;margin:12mm}}
 </style></head>
 <body>
 <div class="no-print">
-  <button class="btn-print" onclick="window.print()">🖨 인쇄 / PDF 저장</button>
-  <button class="btn-close" onclick="window.close()">닫기</button>
+  <button class="btn-print" onclick="window.print()">🖨 Print / Save PDF</button>
+  <button class="btn-close" onclick="window.close()">Close</button>
 </div>
 
-<h1>Packing List</h1>
-<div class="sub">
-  Date: ${today} &nbsp;|&nbsp; Customer: ${quote.customer} &nbsp;|&nbsp; Order No: ${quote.quoteNo}
+<div class="header-info">
+  <p>Customer Code: <strong>${customerCode || "—"}</strong></p>
+  <p class="company">C&amp;C Trading Co., Ltd. (씨앤씨무역)</p>
 </div>
+
+<h1>Packing Details</h1>
 
 <table>
   <thead>
     <tr>
-      <th style="width:5%">No.</th>
-      <th style="width:35%">Description</th>
-      <th class="r" style="width:15%">Q'TY</th>
-      <th class="r" style="width:10%">Unit</th>
-      <th class="r" style="width:17%">Unit Price</th>
-      <th class="r" style="width:18%">Amount</th>
+      <th style="width:18%">Item</th>
+      <th style="width:10%">Material</th>
+      <th style="width:18%">Packing Breakdown</th>
+      <th class="r" style="width:14%">Quantity (pcs)</th>
+      <th class="r" style="width:12%">Cartons (CTNS)</th>
+      <th class="r" style="width:14%">Unit Price (USD)</th>
+      <th class="r" style="width:14%">Amount (USD)</th>
     </tr>
   </thead>
   <tbody>
     ${rows}
-    <tr class="total-row">
-      <td colspan="2">TOTAL</td>
-      <td class="r">${totalQty.toLocaleString()}</td>
-      <td></td>
-      <td></td>
-      <td class="r">USD ${fmt(totalUsd)}</td>
-    </tr>
   </tbody>
 </table>
 
-${imageBase64 ? `
-<div class="pkg-img">
-  <h3>📦 포장 사진</h3>
-  <img src="${imageBase64}" alt="포장 사진"/>
-</div>` : ""}
+<div class="summary">
+  <h2>Total Summary</h2>
+  <ul>
+    <li>Total Quantity: <strong>${totalQty.toLocaleString()} pcs</strong></li>
+    <li>Total Cartons: <strong>${totalCartons} CTNS</strong></li>
+    ${totalUsd > 0 ? `<li>Total Amount: <strong>USD ${totalUsd.toFixed(2)}</strong></li>` : ""}
+  </ul>
+</div>
 
 </body></html>`;
 }

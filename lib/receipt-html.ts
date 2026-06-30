@@ -84,32 +84,34 @@ h1{
 .info-table tr:last-child{border-bottom:none}
 .info-table td{padding:0;vertical-align:middle}
 .label{
-  width:110px;min-width:110px;
-  padding:16px 14px;
+  width:120px;min-width:120px;
+  padding:20px 16px;
   background:#f7f7f7;
-  font-weight:700;font-size:14px;
-  text-align:center;color:#333;
+  font-weight:700;font-size:13px;
+  text-align:center;color:#555;
   border-right:1px solid #ddd;
+  vertical-align:middle;
+  letter-spacing:0.3px;
 }
 .value{
-  padding:16px 20px;
-  font-size:14px;color:#111;line-height:1.6;
+  padding:20px 28px 20px 36px;
+  font-size:14px;color:#111;line-height:1.8;
 }
 
 /* 패킹 계산 */
-.packing-text{font-size:15px;font-weight:700;margin-bottom:10px}
+.packing-text{font-size:16px;font-weight:800;margin-bottom:12px;color:#111;letter-spacing:-0.3px}
 .packing-divider{
-  border:none;border-top:1px dashed #bbb;
-  margin:10px 0;
+  border:none;border-top:1px dashed #ccc;
+  margin:12px 0;
 }
 .packing-calc{
-  display:flex;align-items:center;gap:16px;
-  font-size:14px;color:#333;
+  display:flex;align-items:center;gap:20px;
+  font-size:14px;color:#444;
   flex-wrap:wrap;
 }
 .calc-item{display:flex;align-items:center;gap:6px}
-.calc-item strong{font-weight:700;color:#111}
-.divider{color:#bbb;font-weight:300}
+.calc-item strong{font-weight:800;color:#111;font-size:15px}
+.divider{color:#ccc;font-weight:300}
 
 /* 회사 정보 */
 .company-box{
