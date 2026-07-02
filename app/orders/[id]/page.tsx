@@ -164,7 +164,9 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   async function updateStatus(newStatus:string) {
     setSaving(true);
     try {
-      const res = await fetch(`/api/orders/${id}`, { method:"PATCH", headers:{"Content-Type":"application/json"}, body:JSON.stringify({status:newStatus}) });
+      const body: Record<string, string> = { status: newStatus };
+      if (newStatus === "shipped") body.shipped_date = new Date().toISOString().slice(0, 10);
+      const res = await fetch(`/api/orders/${id}`, { method:"PATCH", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body) });
       const j = await res.json(); setOrder(j.data);
     } finally { setSaving(false); }
   }
