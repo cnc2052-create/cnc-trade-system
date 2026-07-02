@@ -40,11 +40,7 @@ export function buildReceiptHTML(data: ReceiptData): string {
       <span class="calc-item">📦 총박스수 : <strong>${totalBoxes}박스</strong></span>
     </div>` : "";
 
-  const imageSection = data.packingImageBase64 ? `
-    <div class="img-wrap">
-      <div class="img-label">📷 포장 사진</div>
-      <img src="${data.packingImageBase64}" alt="포장 사진"/>
-    </div>` : "";
+  const imageSection = "";
 
   return `<!DOCTYPE html>
 <html lang="ko"><head>
