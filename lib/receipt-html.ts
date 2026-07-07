@@ -16,20 +16,35 @@ export interface ReceiptData {
 function calcPacking(packing: string): { totalQty: number; totalBoxes: number } {
   if (!packing) return { totalQty: 0, totalBoxes: 0 };
   const clean = packing.replace(/\s/g, "");
-  // 복합 패킹: "63×160 + 1×25 + 29×340" 형태 지원
-  let totalQty = 0, totalBoxes = 0;
   const parts = clean.split("+");
-  for (const part of parts) {
-    const m = part.match(/^(\d+)[×xX*](\d+)$/);
-    if (m) {
-      totalQty += parseInt(m[1]) * parseInt(m[2]);
-      totalBoxes += parseInt(m[1]);
-    } else {
-      const single = parseInt(part);
-      if (!isNaN(single)) { totalQty += single; totalBoxes += 1; }
+
+  // N×M 형식이 하나라도 있으면 박스×수량 모드
+  const hasMultiply = parts.some(p => /^\d+[×xX*]\d+$/.test(p));
+
+  if (hasMultiply) {
+    // "63×160 + 1×25 + 29×340" 형태: 각 파트가 박스×수량
+    let totalQty = 0, totalBoxes = 0;
+    for (const part of parts) {
+      const m = part.match(/^(\d+)[×xX*](\d+)$/);
+      if (m) {
+        totalQty += parseInt(m[1]) * parseInt(m[2]);
+        totalBoxes += parseInt(m[1]);
+      } else {
+        // 낱개 여분 (예: +470)
+        const single = parseInt(part);
+        if (!isNaN(single)) { totalQty += single; totalBoxes += 1; }
+      }
     }
+    return { totalQty, totalBoxes };
+  } else {
+    // "25(용기)+245(캡)" 형태: 숫자만 추출해 합산, 전체 1박스
+    let totalQty = 0;
+    for (const part of parts) {
+      const n = parseInt(part.replace(/[^\d]/g, ""));
+      if (!isNaN(n) && n > 0) totalQty += n;
+    }
+    return { totalQty, totalBoxes: totalQty > 0 ? 1 : 0 };
   }
-  return { totalQty, totalBoxes };
 }
 
 function formatDate(d: string): string {
