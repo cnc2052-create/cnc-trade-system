@@ -14,11 +14,22 @@ export interface ReceiptData {
 }
 
 function calcPacking(packing: string): { totalQty: number; totalBoxes: number } {
+  if (!packing) return { totalQty: 0, totalBoxes: 0 };
   const clean = packing.replace(/\s/g, "");
-  const m = clean.match(/^(\d+)[×xX*](\d+)(?:\+(\d+))?/);
-  if (!m) return { totalQty: 0, totalBoxes: 0 };
-  const N = parseInt(m[1]), M = parseInt(m[2]), K = m[3] ? parseInt(m[3]) : 0;
-  return { totalQty: N * M + K, totalBoxes: K > 0 ? N + 1 : N };
+  // 복합 패킹: "63×160 + 1×25 + 29×340" 형태 지원
+  let totalQty = 0, totalBoxes = 0;
+  const parts = clean.split("+");
+  for (const part of parts) {
+    const m = part.match(/^(\d+)[×xX*](\d+)$/);
+    if (m) {
+      totalQty += parseInt(m[1]) * parseInt(m[2]);
+      totalBoxes += parseInt(m[1]);
+    } else {
+      const single = parseInt(part);
+      if (!isNaN(single)) { totalQty += single; totalBoxes += 1; }
+    }
+  }
+  return { totalQty, totalBoxes };
 }
 
 function formatDate(d: string): string {
@@ -34,30 +45,62 @@ function comma(n: number): string { return n.toLocaleString("ko-KR"); }
 export function buildReceiptHTML(data: ReceiptData): string {
   const useItems = data.items && data.items.length > 0;
 
-  // 단일 패킹 계산 (items 없을 때)
-  const singlePack = useItems ? { totalQty: 0, totalBoxes: 0 } : calcPacking(data.packing);
-  const { totalQty, totalBoxes } = singlePack;
-
-  // 부품별 합산 (items 있을 때)
   const itemsCalc = useItems
     ? data.items!.map(it => ({ ...it, ...calcPacking(it.packing) }))
     : [];
   const totalQtyAll = itemsCalc.reduce((s, it) => s + it.totalQty, 0);
   const totalBoxesAll = itemsCalc.reduce((s, it) => s + it.totalBoxes, 0);
 
-  const addressHtml = (data.deliveryAddress || "미입력")
-    .split(/\n/)
-    .map(line => `<div>${line}</div>`)
-    .join("");
+  const singleCalc = useItems ? { totalQty: 0, totalBoxes: 0 } : calcPacking(data.packing);
 
-  const packingCalcHtml = totalQty > 0 ? `
-    <div class="packing-calc">
-      <span class="calc-item">📦 총수량 : <strong>${comma(totalQty)}개</strong></span>
-      <span class="divider">│</span>
-      <span class="calc-item">📦 총박스수 : <strong>${totalBoxes}박스</strong></span>
-    </div>` : "";
+  const addressText = (data.deliveryAddress || "미입력").replace(/\n/g, " ");
 
-  const imageSection = "";
+  // 패킹 섹션 생성 함수
+  function packingSection(packing: string, calc: { totalQty: number; totalBoxes: number }) {
+    return `<div class="field">
+      <span class="field-label">패킹</span>
+      <span class="field-sep">│</span>
+      <span class="field-value">
+        <span class="packing-val">${packing || "미입력"}</span>
+        ${calc.totalQty > 0 ? `
+        <span class="packing-sub">
+          <span>📦 총수량 : <strong>${comma(calc.totalQty)}개</strong></span>
+          <span class="sub-sep">│</span>
+          <span>📦 총박스수 : <strong>${calc.totalBoxes}박스</strong></span>
+        </span>` : ""}
+      </span>
+    </div>`;
+  }
+
+  // 부품 섹션 (items 배열)
+  function itemsSection() {
+    return itemsCalc.map((it, i) => `
+    <div class="field">
+      <span class="field-label">${itemsCalc.length > 1 ? `부품 ${i+1}` : "제품명"}</span>
+      <span class="field-sep">│</span>
+      <span class="field-value">
+        <span class="packing-val">${it.productName || "미입력"}</span>
+        <span class="packing-sub packing-sub-name">${it.packing || ""}</span>
+        ${it.totalQty > 0 ? `
+        <span class="packing-sub">
+          <span>📦 총수량 : <strong>${comma(it.totalQty)}개</strong></span>
+          <span class="sub-sep">│</span>
+          <span>📦 총박스수 : <strong>${it.totalBoxes}박스</strong></span>
+        </span>` : ""}
+      </span>
+    </div>`).join("") + (itemsCalc.length > 1 ? `
+    <div class="field field-total">
+      <span class="field-label">합계</span>
+      <span class="field-sep">│</span>
+      <span class="field-value">
+        <span class="packing-sub">
+          <span>📦 총수량 : <strong>${comma(totalQtyAll)}개</strong></span>
+          <span class="sub-sep">│</span>
+          <span>📦 총박스수 : <strong>${totalBoxesAll}박스</strong></span>
+        </span>
+      </span>
+    </div>` : "");
+  }
 
   return `<!DOCTYPE html>
 <html lang="ko"><head>
@@ -69,87 +112,64 @@ export function buildReceiptHTML(data: ReceiptData): string {
 body{
   font-family:"Apple SD Gothic Neo","Noto Sans KR","Malgun Gothic",sans-serif;
   background:#fff;color:#111;
-  padding:48px 40px;max-width:680px;margin:0 auto;
-  font-size:14px;
+  padding:56px 52px;max-width:720px;margin:0 auto;
+  font-size:14px;line-height:1.7;
 }
 .no-print{position:fixed;top:12px;right:12px;display:flex;gap:8px;z-index:999}
 .no-print button{padding:8px 18px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;border:none}
 .btn-print{background:#111;color:#fff}
 .btn-close{background:#eee;color:#333}
 
-/* 제목 */
 h1{
   text-align:center;
-  font-size:30px;font-weight:900;
-  letter-spacing:10px;
-  margin-bottom:18px;
+  font-size:32px;font-weight:900;
+  letter-spacing:14px;
+  margin-bottom:20px;
   color:#111;
 }
-.title-line{border:none;border-top:2px solid #222;margin-bottom:24px}
+.title-line{border:none;border-top:1.5px solid #222;margin-bottom:28px}
+.divider-line{border:none;border-top:1px solid #ddd;margin:20px 0}
 
-/* 메인 테이블 */
-.info-table{
-  width:100%;border-collapse:collapse;
-  border:1px solid #ddd;border-radius:8px;
-  overflow:hidden;margin-bottom:24px;
+/* 필드 행 */
+.field{
+  display:flex;
+  align-items:flex-start;
+  padding:10px 0;
+  font-size:14px;
+  color:#111;
 }
-.info-table tr{border-bottom:1px solid #ddd}
-.info-table tr:last-child{border-bottom:none}
-.info-table td{padding:0;vertical-align:middle}
-.label{
-  width:120px;min-width:120px;
-  padding:20px 16px;
-  background:#f7f7f7;
-  font-weight:700;font-size:13px;
-  text-align:center;color:#555;
-  border-right:1px solid #ddd;
-  vertical-align:middle;
-  letter-spacing:0.3px;
+.field-label{
+  width:80px;min-width:80px;
+  font-weight:600;color:#444;
+  flex-shrink:0;
 }
-.value{
-  padding:20px 28px 20px 36px;
-  font-size:14px;color:#111;line-height:1.8;
+.field-sep{
+  color:#bbb;margin:0 12px;flex-shrink:0;
 }
+.field-value{
+  flex:1;display:flex;flex-direction:column;gap:4px;
+}
+.packing-val{font-weight:700;font-size:15px;}
+.packing-sub{
+  display:flex;align-items:center;gap:16px;
+  font-size:13px;color:#444;margin-top:2px;
+}
+.packing-sub-name{font-size:12px;color:#666;font-weight:400;}
+.packing-sub strong{font-weight:800;color:#111;font-size:14px;}
+.sub-sep{color:#ccc;}
+.field-total .field-label{color:#1D4ED8;}
+.field-total .packing-sub strong{color:#1D4ED8;}
 
-/* 패킹 계산 */
-.packing-text{font-size:16px;font-weight:800;margin-bottom:12px;color:#111;letter-spacing:-0.3px}
-.packing-divider{
-  border:none;border-top:1px dashed #ccc;
-  margin:12px 0;
-}
-.packing-calc{
-  display:flex;align-items:center;gap:20px;
-  font-size:14px;color:#444;
-  flex-wrap:wrap;
-}
-.calc-item{display:flex;align-items:center;gap:6px}
-.calc-item strong{font-weight:800;color:#111;font-size:15px}
-.divider{color:#ccc;font-weight:300}
-
-/* 회사 정보 */
-.company-box{
-  width:100%;border-collapse:collapse;
-  border:1px solid #ddd;border-radius:8px;
-  overflow:hidden;margin-bottom:24px;
-}
+/* 회사 섹션 */
 .company-title{
-  text-align:center;padding:14px;
-  font-weight:800;font-size:15px;
-  background:#f7f7f7;
-  border-bottom:1px solid #ddd;
+  font-size:15px;font-weight:800;color:#111;
+  margin-bottom:8px;
 }
-.company-box tr{border-bottom:1px solid #ddd}
-.company-box tr:last-child{border-bottom:none}
-
-/* 포장사진 */
-.img-wrap{margin-top:20px}
-.img-label{font-size:13px;font-weight:700;color:#555;margin-bottom:10px}
-.img-wrap img{max-width:100%;border-radius:8px;border:1px solid #ddd}
 
 @media print{
   .no-print{display:none}
-  body{padding:20px 24px}
-  @page{size:A4;margin:12mm}
+  body{padding:24px 32px}
+  @page{size:A4;margin:16mm}
 }
 </style></head>
 <body>
@@ -162,78 +182,52 @@ h1{
 <h1>입 고 명 세 서</h1>
 <hr class="title-line"/>
 
-<table class="info-table">
-  <tr>
-    <td class="label">고객사명</td>
-    <td class="value">${data.customer || "미입력"}</td>
-  </tr>
-  ${useItems ? itemsCalc.map((it, i) => `
-  <tr>
-    <td class="label">${itemsCalc.length > 1 ? `부품 ${i+1}` : "제품명"}</td>
-    <td class="value">
-      <div style="font-weight:700;font-size:14px;margin-bottom:6px;">${it.productName || "미입력"}</div>
-      <div class="packing-text">${it.packing || "미입력"}</div>
-      ${it.totalQty > 0 ? `<hr class="packing-divider"/>
-      <div class="packing-calc">
-        <span class="calc-item">📦 총수량 : <strong>${comma(it.totalQty)}개</strong></span>
-        <span class="divider">│</span>
-        <span class="calc-item">📦 총박스수 : <strong>${it.totalBoxes}박스</strong></span>
-      </div>` : ""}
-    </td>
-  </tr>`).join("") + (itemsCalc.length > 1 ? `
-  <tr>
-    <td class="label" style="background:#EFF6FF;color:#1D4ED8;">전체 합계</td>
-    <td class="value" style="background:#EFF6FF;">
-      <div class="packing-calc">
-        <span class="calc-item">📦 총수량 합계 : <strong style="color:#1D4ED8;">${comma(totalQtyAll)}개</strong></span>
-        <span class="divider">│</span>
-        <span class="calc-item">📦 총박스수 합계 : <strong style="color:#1D4ED8;">${totalBoxesAll}박스</strong></span>
-      </div>
-    </td>
-  </tr>` : "") : `
-  <tr>
-    <td class="label">제품명</td>
-    <td class="value">${data.productName || "미입력"}</td>
-  </tr>
-  <tr>
-    <td class="label">패킹</td>
-    <td class="value">
-      <div class="packing-text">${data.packing || "미입력"}</div>
-      ${totalQty > 0 ? `<hr class="packing-divider"/>${packingCalcHtml}` : ""}
-    </td>
-  </tr>`}
-  <tr>
-    <td class="label">배송지</td>
-    <td class="value">${addressHtml}</td>
-  </tr>
-  <tr>
-    <td class="label">도착예정일</td>
-    <td class="value"><strong>${formatDate(data.deliveryDate)}</strong></td>
-  </tr>
-</table>
+<div class="field">
+  <span class="field-label">고객사명</span>
+  <span class="field-sep">│</span>
+  <span class="field-value">${data.customer || "미입력"}</span>
+</div>
 
-<table class="company-box">
-  <tr>
-    <td colspan="2" class="company-title">씨앤씨무역 (C&C TRADING)</td>
-  </tr>
-  <tr>
-    <td class="label">대표</td>
-    <td class="value">최계화 &nbsp;│&nbsp; 010-2276-0123</td>
-  </tr>
-  <tr>
-    <td class="label">주소</td>
-    <td class="value">
-      <div>경기도 화성시 동탄첨단산업1로 27</div>
-      <div>금강펜테리움 IX타워 B동 2053호</div>
-    </td>
-  </tr>
-  <tr>
-    <td class="label">홈페이지</td>
-    <td class="value">www.cc009.co.kr</td>
-  </tr>
-</table>
+${useItems ? itemsSection() : `
+<div class="field">
+  <span class="field-label">제품명</span>
+  <span class="field-sep">│</span>
+  <span class="field-value">${data.productName || "미입력"}</span>
+</div>
+${packingSection(data.packing, singleCalc)}
+`}
 
-${imageSection}
+<div class="field">
+  <span class="field-label">배송지</span>
+  <span class="field-sep">│</span>
+  <span class="field-value">${addressText}</span>
+</div>
+
+<div class="field">
+  <span class="field-label">도착예정일</span>
+  <span class="field-sep">│</span>
+  <span class="field-value">${formatDate(data.deliveryDate)}</span>
+</div>
+
+<hr class="divider-line"/>
+
+<div class="company-title">씨앤씨무역 (C&amp;C TRADING)</div>
+
+<div class="field">
+  <span class="field-label">대표</span>
+  <span class="field-sep">│</span>
+  <span class="field-value">최계화 &nbsp;│&nbsp; 010-2276-0123</span>
+</div>
+<div class="field">
+  <span class="field-label">주소</span>
+  <span class="field-sep">│</span>
+  <span class="field-value">경기도 화성시 동탄첨단산업1로 27 금강펜테리움 IX타워 B동 2053호</span>
+</div>
+<div class="field">
+  <span class="field-label">홈페이지</span>
+  <span class="field-sep">│</span>
+  <span class="field-value">www.cc009.co.kr</span>
+</div>
 
 </body></html>`;
 }
