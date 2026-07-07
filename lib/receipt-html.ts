@@ -1,7 +1,13 @@
+export interface ReceiptItem {
+  productName: string;
+  packing: string;
+}
+
 export interface ReceiptData {
   customer: string;
   productName: string;
   packing: string;
+  items?: ReceiptItem[];
   deliveryAddress: string;
   deliveryDate: string;
   packingImageBase64?: string;
@@ -26,7 +32,18 @@ function formatDate(d: string): string {
 function comma(n: number): string { return n.toLocaleString("ko-KR"); }
 
 export function buildReceiptHTML(data: ReceiptData): string {
-  const { totalQty, totalBoxes } = calcPacking(data.packing);
+  const useItems = data.items && data.items.length > 0;
+
+  // 단일 패킹 계산 (items 없을 때)
+  const singlePack = useItems ? { totalQty: 0, totalBoxes: 0 } : calcPacking(data.packing);
+  const { totalQty, totalBoxes } = singlePack;
+
+  // 부품별 합산 (items 있을 때)
+  const itemsCalc = useItems
+    ? data.items!.map(it => ({ ...it, ...calcPacking(it.packing) }))
+    : [];
+  const totalQtyAll = itemsCalc.reduce((s, it) => s + it.totalQty, 0);
+  const totalBoxesAll = itemsCalc.reduce((s, it) => s + it.totalBoxes, 0);
 
   const addressHtml = (data.deliveryAddress || "미입력")
     .split(/\n/)
@@ -150,6 +167,30 @@ h1{
     <td class="label">고객사명</td>
     <td class="value">${data.customer || "미입력"}</td>
   </tr>
+  ${useItems ? itemsCalc.map((it, i) => `
+  <tr>
+    <td class="label">${itemsCalc.length > 1 ? `부품 ${i+1}` : "제품명"}</td>
+    <td class="value">
+      <div style="font-weight:700;font-size:14px;margin-bottom:6px;">${it.productName || "미입력"}</div>
+      <div class="packing-text">${it.packing || "미입력"}</div>
+      ${it.totalQty > 0 ? `<hr class="packing-divider"/>
+      <div class="packing-calc">
+        <span class="calc-item">📦 총수량 : <strong>${comma(it.totalQty)}개</strong></span>
+        <span class="divider">│</span>
+        <span class="calc-item">📦 총박스수 : <strong>${it.totalBoxes}박스</strong></span>
+      </div>` : ""}
+    </td>
+  </tr>`).join("") + (itemsCalc.length > 1 ? `
+  <tr>
+    <td class="label" style="background:#EFF6FF;color:#1D4ED8;">전체 합계</td>
+    <td class="value" style="background:#EFF6FF;">
+      <div class="packing-calc">
+        <span class="calc-item">📦 총수량 합계 : <strong style="color:#1D4ED8;">${comma(totalQtyAll)}개</strong></span>
+        <span class="divider">│</span>
+        <span class="calc-item">📦 총박스수 합계 : <strong style="color:#1D4ED8;">${totalBoxesAll}박스</strong></span>
+      </div>
+    </td>
+  </tr>` : "") : `
   <tr>
     <td class="label">제품명</td>
     <td class="value">${data.productName || "미입력"}</td>
@@ -160,7 +201,7 @@ h1{
       <div class="packing-text">${data.packing || "미입력"}</div>
       ${totalQty > 0 ? `<hr class="packing-divider"/>${packingCalcHtml}` : ""}
     </td>
-  </tr>
+  </tr>`}
   <tr>
     <td class="label">배송지</td>
     <td class="value">${addressHtml}</td>

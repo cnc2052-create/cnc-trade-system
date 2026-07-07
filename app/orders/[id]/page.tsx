@@ -154,7 +154,16 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         const res = await fetch("/api/extract-packing", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({imageBase64:base64}) });
         const j = await res.json();
         if (j.success && j.data) {
-          setReceiptData(prev => ({ ...prev, packing:j.data.packing||prev.packing, productName:j.data.productName||prev.productName, deliveryAddress:j.data.deliveryAddress||prev.deliveryAddress, deliveryDate:j.data.deliveryDate||prev.deliveryDate }));
+          const d = j.data;
+          const items = d.items && d.items.length > 0 ? d.items : null;
+          setReceiptData(prev => ({
+            ...prev,
+            items: items || prev.items,
+            packing: items ? (items[0]?.packing || prev.packing) : (d.packing || prev.packing),
+            productName: items ? (items[0]?.productName || prev.productName) : (d.productName || prev.productName),
+            deliveryAddress: d.deliveryAddress || prev.deliveryAddress,
+            deliveryDate: d.deliveryDate || prev.deliveryDate,
+          }));
         }
       } finally { setExtracting(false); }
     };
@@ -713,22 +722,82 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
 
           {/* 입력 필드 */}
           <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
-            {([
-              { key:"customer",     label:"고객사명",   placeholder:"고객사명" },
-              { key:"productName",  label:"제품명",     placeholder:"제품명" },
-              { key:"packing",      label:"패킹",       placeholder:"예: 5×1914 + 470" },
-              { key:"deliveryDate", label:"도착예정일", placeholder:"예: 2026-07-10" },
-            ] as {key:keyof ReceiptData; label:string; placeholder:string}[]).map(({key,label,placeholder}) => (
-              <div key={key} style={{ display:"flex", alignItems:"center", gap:12 }}>
-                <span style={{ width:80, fontSize:12, fontWeight:600, color:"#64748B", flexShrink:0 }}>{label}</span>
-                <input type="text" value={receiptData[key] as string}
-                  onChange={e=>setReceiptData(prev=>({...prev,[key]:e.target.value}))}
-                  placeholder={placeholder}
-                  style={{ flex:1, height:38, padding:"0 12px", borderRadius:10, border:"1px solid #E2E8F0", fontSize:13, color:"#0F172A", outline:"none", background:"#fff" }}
-                  onFocus={e=>e.target.style.borderColor="#DC2626"}
-                  onBlur={e=>e.target.style.borderColor="#E2E8F0"}/>
+            {/* 고객사명 */}
+            <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+              <span style={{ width:80, fontSize:12, fontWeight:600, color:"#64748B", flexShrink:0 }}>고객사명</span>
+              <input type="text" value={receiptData.customer}
+                onChange={e=>setReceiptData(prev=>({...prev,customer:e.target.value}))}
+                placeholder="고객사명"
+                style={{ flex:1, height:38, padding:"0 12px", borderRadius:10, border:"1px solid #E2E8F0", fontSize:13, color:"#0F172A", outline:"none", background:"#fff" }}
+                onFocus={e=>e.target.style.borderColor="#DC2626"}
+                onBlur={e=>e.target.style.borderColor="#E2E8F0"}/>
+            </div>
+
+            {/* 부품별 제품명+패킹 (items 배열) */}
+            {receiptData.items && receiptData.items.length > 0 ? (
+              <div style={{ border:"1px solid #E2E8F0", borderRadius:12, overflow:"hidden" }}>
+                <div style={{ background:"#F8FAFC", padding:"8px 14px", fontSize:11, fontWeight:700, color:"#64748B", borderBottom:"1px solid #E2E8F0" }}>
+                  부품별 제품명 &amp; 패킹 ({receiptData.items.length}개)
+                </div>
+                {receiptData.items.map((item, i) => (
+                  <div key={i} style={{ padding:"10px 14px", borderBottom: i < receiptData.items!.length-1 ? "1px solid #F1F5F9" : "none", display:"flex", gap:8, alignItems:"center" }}>
+                    <span style={{ width:50, fontSize:11, fontWeight:700, color:"#94A3B8", flexShrink:0 }}>부품 {i+1}</span>
+                    <input type="text" value={item.productName}
+                      onChange={e=>{ const items=[...receiptData.items!]; items[i]={...items[i],productName:e.target.value}; setReceiptData(prev=>({...prev,items})); }}
+                      placeholder="제품명/부품명"
+                      style={{ flex:1, height:34, padding:"0 10px", borderRadius:8, border:"1px solid #E2E8F0", fontSize:12, color:"#0F172A", outline:"none", background:"#fff" }}
+                      onFocus={e=>e.target.style.borderColor="#DC2626"}
+                      onBlur={e=>e.target.style.borderColor="#E2E8F0"}/>
+                    <input type="text" value={item.packing}
+                      onChange={e=>{ const items=[...receiptData.items!]; items[i]={...items[i],packing:e.target.value}; setReceiptData(prev=>({...prev,items})); }}
+                      placeholder="패킹 (예: 63×160 + 1×25)"
+                      style={{ flex:1.5, height:34, padding:"0 10px", borderRadius:8, border:"1px solid #E2E8F0", fontSize:12, color:"#0F172A", outline:"none", background:"#fff" }}
+                      onFocus={e=>e.target.style.borderColor="#DC2626"}
+                      onBlur={e=>e.target.style.borderColor="#E2E8F0"}/>
+                    <button onClick={()=>{ const items=receiptData.items!.filter((_,idx)=>idx!==i); setReceiptData(prev=>({...prev,items:items.length>0?items:undefined})); }}
+                      style={{ width:28, height:28, borderRadius:6, border:"none", background:"#FEE2E2", color:"#DC2626", cursor:"pointer", fontSize:14, flexShrink:0 }}>×</button>
+                  </div>
+                ))}
+                <div style={{ padding:"8px 14px" }}>
+                  <button onClick={()=>setReceiptData(prev=>({...prev,items:[...(prev.items||[]),{productName:"",packing:""}]}))}
+                    style={{ fontSize:12, color:"#64748B", background:"none", border:"1px dashed #CBD5E1", borderRadius:8, padding:"4px 12px", cursor:"pointer" }}>
+                    + 부품 추가
+                  </button>
+                </div>
               </div>
-            ))}
+            ) : (
+              <>
+                <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+                  <span style={{ width:80, fontSize:12, fontWeight:600, color:"#64748B", flexShrink:0 }}>제품명</span>
+                  <input type="text" value={receiptData.productName}
+                    onChange={e=>setReceiptData(prev=>({...prev,productName:e.target.value}))}
+                    placeholder="제품명"
+                    style={{ flex:1, height:38, padding:"0 12px", borderRadius:10, border:"1px solid #E2E8F0", fontSize:13, color:"#0F172A", outline:"none", background:"#fff" }}
+                    onFocus={e=>e.target.style.borderColor="#DC2626"}
+                    onBlur={e=>e.target.style.borderColor="#E2E8F0"}/>
+                </div>
+                <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+                  <span style={{ width:80, fontSize:12, fontWeight:600, color:"#64748B", flexShrink:0 }}>패킹</span>
+                  <input type="text" value={receiptData.packing}
+                    onChange={e=>setReceiptData(prev=>({...prev,packing:e.target.value}))}
+                    placeholder="예: 5×1914 + 470"
+                    style={{ flex:1, height:38, padding:"0 12px", borderRadius:10, border:"1px solid #E2E8F0", fontSize:13, color:"#0F172A", outline:"none", background:"#fff" }}
+                    onFocus={e=>e.target.style.borderColor="#DC2626"}
+                    onBlur={e=>e.target.style.borderColor="#E2E8F0"}/>
+                </div>
+              </>
+            )}
+
+            {/* 도착예정일 */}
+            <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+              <span style={{ width:80, fontSize:12, fontWeight:600, color:"#64748B", flexShrink:0 }}>도착예정일</span>
+              <input type="text" value={receiptData.deliveryDate}
+                onChange={e=>setReceiptData(prev=>({...prev,deliveryDate:e.target.value}))}
+                placeholder="예: 2026-07-10"
+                style={{ flex:1, height:38, padding:"0 12px", borderRadius:10, border:"1px solid #E2E8F0", fontSize:13, color:"#0F172A", outline:"none", background:"#fff" }}
+                onFocus={e=>e.target.style.borderColor="#DC2626"}
+                onBlur={e=>e.target.style.borderColor="#E2E8F0"}/>
+            </div>
             <div style={{ display:"flex", gap:12 }}>
               <span style={{ width:80, fontSize:12, fontWeight:600, color:"#64748B", flexShrink:0, paddingTop:8 }}>배송지</span>
               <textarea value={receiptData.deliveryAddress}
